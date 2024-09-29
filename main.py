@@ -361,7 +361,7 @@ def assign_colors(grid, cols, rows):
     # TODO - detect all fault lines, assign a fault type to each one
     # TODO - simulate the movements of our plates for a while and deform them appropriately on a 2D plane still
     # TODO - then level it up to a 3D plane, so we can add subduction etc and make tectonic mountains and pits
-    # TODO - then add hot spots, volcanoes, and any other such extras
+    # TODO - then add hot spots, volcanoes, and any other such extras. Maybe meteor craters too.
     #   And that will conclude our Topology. 
     #   - Step 2 would then be seas, oceans, rivers, lakes. Probably in conjunction with climate. For now, assume sea level is universally the same, ignore tides and tide differences between seas and stuff.
     #   - Step 3 would be climate, if not already done. But I think that goes hand in hand with 2.
