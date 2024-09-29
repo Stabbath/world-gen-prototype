@@ -1,0 +1,643 @@
+import pygame
+import sys
+import math
+import random
+from collections import deque
+
+# Initialize Pygame
+pygame.init()
+
+# Define screen dimensions
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Hexagonal Grid World with Zoom and Pan")
+
+# Clock for controlling frame rate
+clock = pygame.time.Clock()
+FPS = 60
+
+# Define Neighbor Offsets for Even-Q Vertical Layout
+EVEN_Q_NEIGHBORS = [ 
+    (+1,  0), (+1, -1), ( 0, -1),
+    (-1, -1), (-1,  0), ( 0, +1)
+]
+
+ODD_Q_NEIGHBORS = [
+    (+1, +1), (+1,  0), ( 0, -1),
+    (-1,  0), (-1, +1), ( 0, +1)
+]
+
+def hex_corner(center, size, i):
+    """
+    Calculate the corner position of a hexagon.
+
+    Parameters:
+        center (tuple): (x, y) position of the hexagon center.
+        size (float): Size (radius) of the hexagon.
+        i (int): Corner index (0 to 5).
+
+    Returns:
+        tuple: (x, y) position of the corner.
+    """
+    angle_deg = 60 * i + 30  # Adjusted for pointy-topped hexagons
+    angle_rad = math.radians(angle_deg)
+    return (
+        center[0] + size * math.cos(angle_rad),
+        center[1] + size * math.sin(angle_rad),
+    )
+
+def draw_hexagon(surface, color, position, size, width=0):
+    """
+    Draw a single hexagon on the surface.
+
+    Parameters:
+        surface (pygame.Surface): The surface to draw on.
+        color (tuple): RGB color of the hexagon.
+        position (tuple): (x, y) position of the hexagon center.
+        size (float): Size (radius) of the hexagon.
+        width (int): Border width. 0 for filled hexagon.
+    """
+    corners = [hex_corner(position, size, i) for i in range(6)]
+    pygame.draw.polygon(surface, color, corners, width)
+
+def offset_to_pixel(col, row, size, camera_offset, scale):
+    """
+    Converts even-q offset coordinates to pixel positions with camera transformations.
+
+    Parameters:
+        col (int): Column index.
+        row (int): Row index.
+        size (float): Size (radius) of the hexagon.
+        camera_offset (list): [x_offset, y_offset] for panning.
+        scale (float): Zoom scale.
+
+    Returns:
+        tuple: (x, y) pixel position.
+    """
+    x = size * math.sqrt(3) * (col + 0.5 * (row & 1))
+    y = size * 1.5 * row
+    # Apply camera transformations
+    x = x * scale + camera_offset[0]
+    y = y * scale + camera_offset[1]
+    return (x, y)
+
+def pixel_to_offset(x, y, size, camera_offset, scale, cols, rows):
+    """
+    Converts pixel positions back to even-q offset coordinates.
+
+    Parameters:
+        x (float): X position in pixels.
+        y (float): Y position in pixels.
+        size (float): Size (radius) of the hexagon.
+        camera_offset (list): [x_offset, y_offset] for panning.
+        scale (float): Zoom scale.
+        cols (int): Total number of columns.
+        rows (int): Total number of rows.
+
+    Returns:
+        tuple: (col, row) coordinates.
+    """
+    # Adjust for camera
+    x = (x - camera_offset[0]) / scale
+    y = (y - camera_offset[1]) / scale
+
+    q = (x * math.sqrt(3)/3 - y / 3)
+    r = y * 2/3
+
+    # Round to nearest hex
+    q_round = round(q)
+    r_round = round(r)
+    s_round = round(-q - r)
+
+    q_diff = abs(q_round - q)
+    r_diff = abs(r_round - r)
+    s_diff = abs(s_round - (-q - r))
+
+    if q_diff > r_diff and q_diff > s_diff:
+        q_round = -r_round - s_round
+    elif r_diff > s_diff:
+        r_round = -q_round - s_round
+    else:
+        s_round = -q_round - r_round
+
+    col = q_round
+    row = r_round + (q_round - (q_round & 1)) // 2
+
+    # Clamp to grid boundaries
+    col = max(0, min(cols - 1, col))
+    row = max(0, min(rows - 1, row))
+
+    return (col, row)
+
+def get_neighbors(col, row, cols, rows):
+    """
+    Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
+    ensuring that neighbors are within grid boundaries.
+
+    Parameters:
+        col (int): The column index of the current cell.
+        row (int): The row index of the current cell.
+        cols (int): Total number of columns in the grid.
+        rows (int): Total number of rows in the grid.
+
+    Returns:
+        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells within bounds.
+    """
+    neighbors = []
+
+    # Determine if the column is even or odd
+    if col % 2 == 0:
+        deltas = EVEN_Q_NEIGHBORS
+    else:
+        deltas = ODD_Q_NEIGHBORS
+
+    # Calculate neighbor positions with boundary checks
+    for dc, dr in deltas:
+        neighbor_col = col + dc
+        neighbor_row = row + dr
+
+        # Check if neighbor is within grid boundaries
+        if 0 <= neighbor_col < cols and 0 <= neighbor_row < rows:
+            neighbors.append((neighbor_col, neighbor_row))
+
+    return neighbors
+
+def generate_offset_grid(cols, rows):
+    """
+    Generates a list of grid cells as (col, row) tuples.
+
+    Parameters:
+        cols (int): Number of columns.
+        rows (int): Number of rows.
+
+    Returns:
+        List[Tuple[int, int]]: List of (col, row) tuples.
+    """
+    grid = []
+    for row in range(rows):
+        for col in range(cols):
+            grid.append((col, row))
+    return grid
+
+def spread_base(cols, rows, colors, grid_colored, plate_queues):
+    """
+    Spreads colors across the grid using BFS, without wrap-around ("flat world").
+
+    Parameters:
+        cols (int): Number of columns in the grid.
+        rows (int): Number of rows in the grid.
+        colors (List[Tuple[int, int, int]]): List of RGB color tuples representing different plates.
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with initial color assignments.
+        plate_queues (List[deque]): Queues for each plate to manage BFS.
+
+    Returns:
+        List[Tuple[int, int, Tuple[int, int, int]]]: Updated grid with colors spread across it.
+    """
+    # Spread colors using BFS for each plate
+    plates_active = len(colors)  # Number of plates still spreading
+
+    while plates_active > 0:
+        for i, color in enumerate(colors):
+            if not plate_queues[i]:
+                continue  # Plate has no more cells to spread
+
+            current_level_size = len(plate_queues[i])
+            for _ in range(current_level_size):
+                current_cell = plate_queues[i].popleft()
+                current_col, current_row = current_cell
+
+                # Get neighbors of the current cell
+                neighbors = get_neighbors(current_col, current_row, cols, rows)
+
+                for neighbor_col, neighbor_row in neighbors:
+                    neighbor_idx = neighbor_row * cols + neighbor_col
+                    if grid_colored[neighbor_idx][2] is None:
+                        # Assign the plate's color to the neighbor
+                        grid_colored[neighbor_idx] = (neighbor_col, neighbor_row, color)
+                        # Add the neighbor to the queue for further spreading
+                        plate_queues[i].append((neighbor_col, neighbor_row))
+
+            # Check if the plate's queue is empty after spreading
+            if not plate_queues[i]:
+                plates_active -= 1
+
+    return grid_colored
+
+def get_neighbors_wraparound(col, row, cols, rows):
+    """
+    Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
+    with horizontal wraparound.
+
+    Parameters:
+        col (int): The column index of the current cell.
+        row (int): The row index of the current cell.
+        cols (int): Total number of columns in the grid.
+        rows (int): Total number of rows in the grid.
+
+    Returns:
+        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells with horizontal wraparound.
+    """
+    neighbors = []
+
+    # Determine if the column is even or odd
+    if col % 2 == 0:
+        deltas = EVEN_Q_NEIGHBORS
+    else:
+        deltas = ODD_Q_NEIGHBORS
+
+    # Calculate neighbor positions with wraparound for columns
+    for dc, dr in deltas:
+        # Wrap the column index
+        neighbor_col = (col + dc) % cols
+        neighbor_row = row + dr
+
+        # Check if the neighbor row is within bounds
+        if 0 <= neighbor_row < rows:
+            neighbors.append((neighbor_col, neighbor_row))
+
+    return neighbors
+
+def spread_wraparound(cols, rows, colors, grid_colored, plate_queues):
+    """
+    Spreads colors across the grid using BFS, allowing horizontal wraparound.
+
+    Parameters:
+        cols (int): Number of columns in the grid.
+        rows (int): Number of rows in the grid.
+        colors (List[Tuple[int, int, int]]): List of RGB color tuples representing different plates.
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with initial color assignments.
+        plate_queues (List[deque]): Queues for each plate to manage BFS.
+
+    Returns:
+        List[Tuple[int, int, Tuple[int, int, int]]]: Updated grid with colors spread across it.
+    """
+    # Spread colors using BFS for each plate with horizontal wraparound
+    plates_active = len(colors)  # Number of plates still spreading
+
+    while plates_active > 0:
+        for i, color in enumerate(colors):
+            if not plate_queues[i]:
+                continue  # Plate has no more cells to spread
+
+            current_level_size = len(plate_queues[i])
+            for _ in range(current_level_size):
+                current_cell = plate_queues[i].popleft()
+                current_col, current_row = current_cell
+
+                # Get neighbors with horizontal wraparound
+                neighbors = get_neighbors_wraparound(current_col, current_row, cols, rows)
+
+                for neighbor_col, neighbor_row in neighbors:
+                    neighbor_idx = neighbor_row * cols + neighbor_col
+                    if grid_colored[neighbor_idx][2] is None:
+                        # Assign the plate's color to the neighbor
+                        grid_colored[neighbor_idx] = (neighbor_col, neighbor_row, color)
+                        # Add the neighbor to the queue for further spreading
+                        plate_queues[i].append((neighbor_col, neighbor_row))
+
+            # Check if the plate's queue is empty after spreading
+            if not plate_queues[i]:
+                plates_active -= 1
+
+    return grid_colored
+
+def assign_colors(grid, cols, rows):
+    """
+    Assigns colors to the grid cells simulating tectonic plate spreading.
+
+    Parameters:
+        grid (List[Tuple[int, int]]): List of grid cells as (col, row) tuples.
+        cols (int): Number of columns.
+        rows (int): Number of rows.
+
+    Returns:
+        List[Tuple[int, int, tuple]]: List of (col, row, color) tuples.
+    """
+    # Define colors representing tectonic plates
+    colors = [
+        (255, 0, 0),       # Red
+        (0, 255, 0),       # Green
+        (0, 0, 255),       # Blue
+        (255, 255, 0),     # Yellow
+        (255, 0, 255),     # Magenta
+        (0, 255, 255),     # Cyan
+        (255, 165, 0),     # Orange
+        (128, 0, 128),     # Purple
+        (0, 128, 0),       # Dark Green
+        (128, 128, 0),     # Olive
+        (0, 0, 128),       # Navy
+        (255, 192, 203),   # Pink
+    ]
+
+    # Initialize grid with no colors
+    grid_colored = [ (col, row, None) for (col, row) in grid ]
+
+    # Initialize neighbors queues for each plate
+    plate_queues = [ deque() for _ in range(len(colors)) ]
+
+    # Assign initial colors (seeds) for each plate
+    for i, color in enumerate(colors):
+        while True:
+            rand_col = random.randint(0, cols - 1)
+            rand_row = random.randint(0, rows - 1)
+            rand_idx = rand_row * cols + rand_col
+            if grid_colored[rand_idx][2] is None:
+                grid_colored[rand_idx] = (rand_col, rand_row, color)
+                plate_queues[i].append((rand_col, rand_row))
+                break  # Ensure unique initial seeds
+
+    MODE_BASE = 1
+    MODE_WRAPAROUND = 2
+    mode = 2
+    
+    if mode == MODE_BASE:
+        return spread_base(cols, rows, colors, grid_colored, plate_queues)
+    elif mode == MODE_WRAPAROUND:
+        return spread_wraparound(cols, rows, colors, grid_colored, plate_queues)
+    else:
+        raise ValueError("Invalid spreading mode selected")
+        
+    # Define expansion distribution
+    # For 12 plates: one gets 4, one gets 3, one gets 2, one gets 1 expansions
+    expansion_distribution = {4:1, 3:1, 2:1, 1:1}
+
+    # Add expansions to the grid
+    grid_colored = add_expansions(grid_colored, cols, rows, colors, expansion_distribution)
+
+def perform_tendril(start_col, start_row, grid_colored, cols, rows, target_color, max_length=10):
+    """
+    Performs a tendril expansion from a starting cell, converting cells to the target color.
+
+    Parameters:
+        start_col (int):
+            The starting column index for the tendril.
+        start_row (int):
+            The starting row index for the tendril.
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]):
+            The grid with color assignments.
+        cols (int):
+            Total number of columns in the grid.
+        rows (int):
+            Total number of rows in the grid.
+        target_color (Tuple[int, int, int]):
+            The RGB color of the plate performing the expansion.
+        max_length (int):
+            The maximum length of the tendril.
+
+    Returns:
+        None:
+            The grid_colored list is modified in place.
+    """
+    current_col, current_row = start_col, start_row
+    for _ in range(max_length):
+        neighbors = get_neighbors(current_col, current_row, cols, rows)
+        # Filter neighbors that are not already the target color
+        potential_cells = [ (c, r) for (c, r) in neighbors if grid_colored[r * cols + c][2] != target_color ]
+        if not potential_cells:
+            break  # No more cells to convert
+        # Choose a random neighbor to convert
+        next_col, next_row = random.choice(potential_cells)
+        index = next_row * cols + next_col
+        current_color = grid_colored[index][2]
+        # Change the color to the target color
+        grid_colored[index] = (next_col, next_row, target_color)
+        # Move to the next cell
+        current_col, current_row = next_col, next_row
+
+def get_random_boundary_cell(plate_cells, grid_colored, cols, rows):
+    """
+    Selects a random boundary cell from the list of plate cells.
+
+    Parameters:
+        plate_cells (List[Tuple[int, int]]):
+            List of cells belonging to the plate.
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]):
+            The grid with color assignments.
+        cols (int):
+            Total number of columns in the grid.
+        rows (int):
+            Total number of rows in the grid.
+
+    Returns:
+        Tuple[int, int] or None:
+            A randomly selected boundary cell as (col, row). Returns None if no boundary cells are found.
+    """
+    boundary_cells = [cell for cell in plate_cells if find_boundary_cells(cell[0], cell[1], grid_colored, cols, rows)]
+    if not boundary_cells:
+        return None
+    return random.choice(boundary_cells)
+
+def find_boundary_cells(col, row, grid_colored, cols, rows):
+    """
+    Finds boundary cells for a given plate by checking if a cell has neighbors of different colors.
+
+    Parameters:
+        col (int):
+            The column index of the cell.
+        row (int):
+            The row index of the cell.
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]):
+            The grid with color assignments.
+        cols (int):
+            Total number of columns in the grid.
+        rows (int):
+            Total number of rows in the grid.
+
+    Returns:
+        bool:
+            True if the cell is a boundary cell, False otherwise.
+    """
+    index = row * cols + col
+    cell_color = grid_colored[index][2]
+    neighbors = get_neighbors(col, row, cols, rows)
+    for neighbor_col, neighbor_row in neighbors:
+        neighbor_idx = neighbor_row * cols + neighbor_col
+        neighbor_color = grid_colored[neighbor_idx][2]
+        if neighbor_color != cell_color:
+            return True
+    return False
+
+def find_plate_cells(grid_colored, color):
+    """
+    Finds all cells in the grid that belong to a specific plate color.
+
+    Parameters:
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]):
+            The grid with color assignments.
+        color (Tuple[int, int, int]):
+            The RGB color of the plate to search for.
+
+    Returns:
+        List[Tuple[int, int]]:
+            A list of (col, row) tuples belonging to the specified plate.
+    """
+    return [(col, row) for (col, row, cell_color) in grid_colored if cell_color == color]
+
+def add_expansions(grid_colored, cols, rows, colors, expansion_distribution):
+    """
+    Adds expansions (tendrils) to selected plates to simulate aggressive plate movements.
+
+    Parameters:
+        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]):
+            The grid with color assignments.
+        cols (int):
+            Total number of columns in the grid.
+        rows (int):
+            Total number of rows in the grid.
+        colors (List[Tuple[int, int, int]]):
+            List of RGB color tuples representing different plates.
+        expansion_distribution (Dict[int, int]):
+            A dictionary mapping the number of expansions to the number of plates.
+            For example, {4:1, 3:1, 2:1, 1:1} means one plate gets 4 expansions,
+            one gets 3, etc.
+
+    Returns:
+        List[Tuple[int, int, Tuple[int, int, int]]]:
+            The updated grid_colored list with expansions added.
+    """
+    # Shuffle the colors to randomly select which plates get expansions
+    shuffled_colors = colors.copy()
+    random.shuffle(shuffled_colors)
+
+    # Flatten the expansion_distribution into a list of expansion counts
+    expansion_counts = []
+    for count, num_plates in expansion_distribution.items():
+        expansion_counts.extend([count] * num_plates)
+
+    # Ensure we don't exceed the number of available plates
+    expansion_counts = expansion_counts[:len(shuffled_colors)]
+
+    # Assign expansions to plates
+    for color, num_expansions in zip(shuffled_colors, expansion_counts):
+        if num_expansions <= 0:
+            continue  # Skip plates with no expansions
+
+        # Find all cells belonging to the plate
+        plate_cells = find_plate_cells(grid_colored, color)
+        if not plate_cells:
+            continue  # No cells found for this plate
+
+        for _ in range(num_expansions):
+            # Select a random boundary cell
+            boundary_cell = get_random_boundary_cell(plate_cells, grid_colored, cols, rows)
+            if boundary_cell is None:
+                break  # No boundary cells available
+            start_col, start_row = boundary_cell
+            # Perform the tendril expansion
+            perform_tendril(start_col, start_row, grid_colored, cols, rows, color, max_length=20)
+
+    # TODO - need to do a final pass to make sure that that all tiles belonging to the same plate are contiguous
+
+    return grid_colored
+        
+        
+def get_color(color):
+    """
+    Returns the RGB color tuple.
+
+    Parameters:
+        color (tuple): RGB color.
+
+    Returns:
+        tuple: RGB color.
+    """
+    return color if color else (255, 255, 255)  # Default to white if no color
+
+def is_visible(pixel, size, screen_width, screen_height):
+    """
+    Checks if a hexagon is within the visible screen area with a buffer.
+
+    Parameters:
+        pixel (tuple): (x, y) pixel position of the hexagon center.
+        size (float): Size (radius) of the hexagon.
+        screen_width (int): Width of the screen.
+        screen_height (int): Height of the screen.
+
+    Returns:
+        bool: True if visible, False otherwise.
+    """
+    x, y = pixel
+    buffer = size * 2
+    return (-buffer < x < screen_width + buffer) and (-buffer < y < screen_height + buffer)
+
+def main():
+    # Hexagon size
+    size = 20  # Adjust size as needed
+
+    # Grid dimensions
+    cols = 100  # Number of columns
+    rows = 100  # Number of rows
+
+    # Generate and assign colors to the grid
+    grid = generate_offset_grid(cols, rows)
+    grid = assign_colors(grid, cols, rows)
+
+    # Camera parameters
+    camera_offset = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2]  # Start at center
+    scale = 1.0  # Initial zoom level
+    dragging = False
+    last_mouse_pos = (0, 0)
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left mouse button
+                    dragging = True
+                    last_mouse_pos = event.pos
+                elif event.button == 4:  # Mouse wheel up
+                    # Zoom in
+                    scale *= 1.1
+                    # Adjust camera to zoom towards mouse position
+                    mouse_x, mouse_y = event.pos
+                    camera_offset[0] = mouse_x - (mouse_x - camera_offset[0]) * 1.1
+                    camera_offset[1] = mouse_y - (mouse_y - camera_offset[1]) * 1.1
+                elif event.button == 5:  # Mouse wheel down
+                    # Zoom out
+                    scale /= 1.1
+                    # Adjust camera to zoom towards mouse position
+                    mouse_x, mouse_y = event.pos
+                    camera_offset[0] = mouse_x - (mouse_x - camera_offset[0]) / 1.1
+                    camera_offset[1] = mouse_y - (mouse_y - camera_offset[1]) / 1.1
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    dragging = False
+
+            elif event.type == pygame.MOUSEMOTION:
+                if dragging:
+                    dx = event.pos[0] - last_mouse_pos[0]
+                    dy = event.pos[1] - last_mouse_pos[1]
+                    camera_offset[0] += dx
+                    camera_offset[1] += dy
+                    last_mouse_pos = event.pos
+
+        # Fill screen with background color
+        screen.fill((0, 0, 0))  # Black background
+
+        # Draw hexagons
+        for cell in grid:
+            col, row, color = cell
+            pixel = offset_to_pixel(col, row, size, camera_offset, scale)
+            if is_visible(pixel, size * scale, SCREEN_WIDTH, SCREEN_HEIGHT):
+                hex_color = get_color(color)
+                draw_hexagon(screen, hex_color, pixel, size * scale, width=0)
+
+        # Optionally, display current zoom level
+        font = pygame.font.SysFont(None, 24)
+        zoom_text = font.render(f'Zoom: {scale:.2f}x', True, (255, 255, 255))
+        screen.blit(zoom_text, (10, 10))
+
+        # Update the display
+        pygame.display.flip()
+        clock.tick(FPS)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
