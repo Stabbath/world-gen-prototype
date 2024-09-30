@@ -214,7 +214,7 @@ def get_neighbors_wraparound(col, row, cols, rows):
 
     return neighbors
 
-def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True):
+def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     """
     Spreads colors across the grid using BFS, allowing horizontal wraparound.
 
@@ -235,6 +235,11 @@ def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc
         for i, color in enumerate(colors):
             if not plate_queues[i]:
                 continue  # Plate has no more cells to spread to
+                
+            # Statistical growth scale - % chance to grow or not grow each iteration
+            if growth_scales is not None:
+                if random.random() > growth_scales[i]:
+                    continue
 
             if individual_spread:
                 current_cell = popfunc(plate_queues[i])
@@ -324,21 +329,14 @@ def assign_colors(grid, cols, rows):
         del l[rand_index]
         return value
         
-    popfunc = randpop
+    neighbors_func = get_neighbors_wraparound # or get_neighbors
+    popfunc = leftpop
     individual_spread = False
-
-    MODE_BASE = 1
-    MODE_WRAPAROUND = 2
-    mode = 2
+    growth_scales = None # [1.0] * 8 + [0.5] * 4
     
-    if mode == MODE_BASE:
-        return spread_generic(cols, rows, colors, grid_colored, plate_queues, get_neighbors, popfunc, individual_spread)
-    elif mode == MODE_WRAPAROUND:
-        return spread_generic(cols, rows, colors, grid_colored, plate_queues, get_neighbors_wraparound, popfunc, individual_spread)
-    else:
-        raise ValueError("Invalid spreading mode selected")
+    return spread_generic(cols, rows, colors, grid_colored, plate_queues, neighbors_func, popfunc, individual_spread, growth_scales)
         # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
-        # TODO - another idea: add a "scale" variable to each plate, which ranges from 0 to 1. When we would do an iteratioon for a plate, the "scale" is the percentage chance that we actually do the iteration; otherwise we skip it. Statistically, this means that e.g. a 0.5 scale will grow half as fast as a 1.0 scale.
+        # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
         
         
     # TODO - detect all fault lines, assign a fault type to each one
