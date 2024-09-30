@@ -1,8 +1,9 @@
 import pygame
 import sys
 import math
-import random
-from collections import deque
+
+from tectonic_generator import generate_world
+
 
 # Initialize Pygame
 pygame.init()
@@ -17,16 +18,6 @@ pygame.display.set_caption("Hexagonal Grid World with Zoom and Pan")
 clock = pygame.time.Clock()
 FPS = 60
 
-# Define Neighbor Offsets for Even-Q Vertical Layout
-EVEN_Q_NEIGHBORS = [ 
-    (+1,  0), (+1, -1), ( 0, -1),
-    (-1, -1), (-1,  0), ( 0, +1)
-]
-
-ODD_Q_NEIGHBORS = [
-    (+1, +1), (+1,  0), ( 0, -1),
-    (-1,  0), (-1, +1), ( 0, +1)
-]
 
 def hex_corner(center, size, i):
     """
@@ -130,39 +121,6 @@ def pixel_to_offset(x, y, size, camera_offset, scale, cols, rows):
 
     return (col, row)
 
-def get_neighbors(col, row, cols, rows):
-    """
-    Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
-    ensuring that neighbors are within grid boundaries.
-
-    Parameters:
-        col (int): The column index of the current cell.
-        row (int): The row index of the current cell.
-        cols (int): Total number of columns in the grid.
-        rows (int): Total number of rows in the grid.
-
-    Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells within bounds.
-    """
-    neighbors = []
-
-    # Determine if the column is even or odd
-    if col % 2 == 0:
-        deltas = EVEN_Q_NEIGHBORS
-    else:
-        deltas = ODD_Q_NEIGHBORS
-
-    # Calculate neighbor positions with boundary checks
-    for dc, dr in deltas:
-        neighbor_col = col + dc
-        neighbor_row = row + dr
-
-        # Check if neighbor is within grid boundaries
-        if 0 <= neighbor_col < cols and 0 <= neighbor_row < rows:
-            neighbors.append((neighbor_col, neighbor_row))
-
-    return neighbors
-
 def generate_offset_grid(cols, rows):
     """
     Generates a list of grid cells as (col, row) tuples.
@@ -179,187 +137,6 @@ def generate_offset_grid(cols, rows):
         for col in range(cols):
             grid.append((col, row))
     return grid
-
-def get_neighbors_wraparound(col, row, cols, rows):
-    """
-    Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
-    with horizontal wraparound.
-
-    Parameters:
-        col (int): The column index of the current cell.
-        row (int): The row index of the current cell.
-        cols (int): Total number of columns in the grid.
-        rows (int): Total number of rows in the grid.
-
-    Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells with horizontal wraparound.
-    """
-    neighbors = []
-
-    # Determine if the column is even or odd
-    if col % 2 == 0:
-        deltas = EVEN_Q_NEIGHBORS
-    else:
-        deltas = ODD_Q_NEIGHBORS
-
-    # Calculate neighbor positions with wraparound for columns
-    for dc, dr in deltas:
-        # Wrap the column index
-        neighbor_col = (col + dc) % cols
-        neighbor_row = row + dr
-
-        # Check if the neighbor row is within bounds
-        if 0 <= neighbor_row < rows:
-            neighbors.append((neighbor_col, neighbor_row))
-
-    return neighbors
-
-def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
-    """
-    Spreads colors across the grid using BFS, allowing horizontal wraparound.
-
-    Parameters:
-        cols (int): Number of columns in the grid.
-        rows (int): Number of rows in the grid.
-        colors (List[Tuple[int, int, int]]): List of RGB color tuples representing different plates.
-        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with initial color assignments.
-        plate_queues (List[deque]): Queues for each plate to manage BFS.
-
-    Returns:
-        List[Tuple[int, int, Tuple[int, int, int]]]: Updated grid with colors spread across it.
-    """
-    # Spread colors using BFS for each plate with horizontal wraparound
-    plates_active = len(colors)  # Number of plates still spreading
-
-    while plates_active > 0:
-        for i, color in enumerate(colors):
-            if not plate_queues[i]:
-                continue  # Plate has no more cells to spread to
-                
-            # Statistical growth scale - % chance to grow or not grow each iteration
-            if growth_scales is not None:
-                if random.random() > growth_scales[i]:
-                    continue
-
-            if individual_spread:
-                current_cell = popfunc(plate_queues[i])
-                current_col, current_row = current_cell
-                current_idx = current_row * cols + current_col
-                
-                # If not colored yet, assign the plate's color to the cell
-                if grid_colored[current_idx][2] is None:
-                    grid_colored[current_idx] = (current_col, current_row, color)
-
-                    # Get its neighbors, add them to the queue
-                    neighbors = neighborsfunc(current_col, current_row, cols, rows)
-                    for neighbor_col, neighbor_row in neighbors:
-                        plate_queues[i].append((neighbor_col, neighbor_row))
-            else:
-                for _ in range(len(plate_queues[i])):
-                    current_cell = popfunc(plate_queues[i])
-                    current_col, current_row = current_cell
-                    current_idx = current_row * cols + current_col
-                    
-                    # If not colored yet, assign the plate's color to the cell
-                    if grid_colored[current_idx][2] is None:
-                        grid_colored[current_idx] = (current_col, current_row, color)
-    
-                        # Get its neighbors, add them to the queue
-                        neighbors = neighborsfunc(current_col, current_row, cols, rows)
-                        for neighbor_col, neighbor_row in neighbors:
-                            plate_queues[i].append((neighbor_col, neighbor_row))
-                
-
-            # Check if the plate's queue is empty after spreading
-            if not plate_queues[i]:
-                plates_active -= 1
-
-    return grid_colored
-
-def assign_colors(grid, cols, rows):
-    """
-    Assigns colors to the grid cells simulating tectonic plate spreading.
-
-    Parameters:
-        grid (List[Tuple[int, int]]): List of grid cells as (col, row) tuples.
-        cols (int): Number of columns.
-        rows (int): Number of rows.
-
-    Returns:
-        List[Tuple[int, int, tuple]]: List of (col, row, color) tuples.
-    """
-    # Define colors representing tectonic plates
-    colors = [
-        (255, 0, 0),       # Red
-        (0, 255, 0),       # Green
-        (0, 0, 255),       # Blue
-        (255, 255, 0),     # Yellow
-        (255, 0, 255),     # Magenta
-        (0, 255, 255),     # Cyan
-        (255, 165, 0),     # Orange
-        (128, 0, 128),     # Purple
-        (0, 128, 0),       # Dark Green
-        (128, 128, 0),     # Olive
-        (0, 0, 128),       # Navy
-        (255, 192, 203),   # Pink
-    ]
-
-    # Initialize grid with no colors
-    grid_colored = [ (col, row, None) for (col, row) in grid ]
-
-    # Initialize neighbors queues for each plate
-    plate_queues = [ deque() for _ in range(len(colors)) ]
-
-    # Add seed position for each plate to its queue
-    for i, color in enumerate(colors):
-        while True:
-            rand_col = random.randint(0, cols - 1)
-            rand_row = random.randint(0, rows - 1)
-            rand_idx = rand_row * cols + rand_col
-            if grid_colored[rand_idx][2] is None:
-                plate_queues[i].append((rand_col, rand_row))
-                break  # Ensure unique initial seeds
-
-    def leftpop(l):
-        return l.popleft()
-
-    def randpop(l):
-        rand_index = random.randint(0, len(l) - 1)
-        value = l[rand_index]
-        del l[rand_index]
-        return value
-        
-    neighbors_func = get_neighbors_wraparound # or get_neighbors
-    popfunc = leftpop
-    individual_spread = False
-    growth_scales = None # [1.0] * 8 + [0.5] * 4
-    
-    return spread_generic(cols, rows, colors, grid_colored, plate_queues, neighbors_func, popfunc, individual_spread, growth_scales)
-        # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
-        # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
-        
-        
-    # TODO - detect all fault lines, assign a fault type to each one
-    # TODO - simulate the movements of our plates for a while and deform them appropriately on a 2D plane still
-    # TODO - then level it up to a 3D plane, so we can add subduction etc and make tectonic mountains and pits
-    # TODO - then add hot spots, volcanoes, and any other such extras. Maybe meteor craters too.
-    #   And that will conclude our Topology. It could however be developed further by for example defining oceanic vs continental plates, or rock composition (and density), or plate age.
-    #   - Step 2 would then be seas, oceans, rivers, lakes. Probably in conjunction with climate. For now, assume sea level is universally the same, ignore tides and tide differences between seas and stuff.
-    #   - Step 3 would be climate, if not already done. But I think that goes hand in hand with 2.
-    #   - Step 4 would then be erosion, finetuning topology based on the effect of climate.
-    #   And that would conclude our Geology. I think. Afterwards, we can tackle civilizational simulation.
-        
-def get_color(color):
-    """
-    Returns the RGB color tuple.
-
-    Parameters:
-        color (tuple): RGB color.
-
-    Returns:
-        tuple: RGB color.
-    """
-    return color if color else (255, 255, 255)  # Default to white if no color
 
 def is_visible(pixel, size, screen_width, screen_height):
     """
@@ -388,7 +165,7 @@ def main():
 
     # Generate and assign colors to the grid
     grid = generate_offset_grid(cols, rows)
-    grid = assign_colors(grid, cols, rows)
+    grid = generate_world(grid, cols, rows)
 
     # Camera parameters
     camera_offset = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2]  # Start at center
@@ -441,8 +218,7 @@ def main():
             col, row, color = cell
             pixel = offset_to_pixel(col, row, size, camera_offset, scale)
             if is_visible(pixel, size * scale, SCREEN_WIDTH, SCREEN_HEIGHT):
-                hex_color = get_color(color)
-                draw_hexagon(screen, hex_color, pixel, size * scale, width=0)
+                draw_hexagon(screen, color, pixel, size * scale, width=0)
 
         # Optionally, display current zoom level
         font = pygame.font.SysFont(None, 24)
