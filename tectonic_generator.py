@@ -4,13 +4,26 @@ from neighbor_functions import get_neighbors_wraparound
 
 def generate_world(grid, cols, rows):
     grid = plate_method(grid, cols, rows) # TODO - gui's alternative would be here instead of plate_method
-    # TODO - smoothing of disconnected plate parts. Then detection of fault lines and plates - if we need otpimization later, these should be made a part of the plate_method (or fault_method), and returned by those functions.
+    
+    # NOTE - if we need optimization later, smoothen and detection should be made a part of the plate_method (or fault_method)
+    grid = smoothen_faults(grid, cols, rows)
+    plates, faults = detect_plates_and_faults(grid, cols, rows)
 
     # TODO - fault line and plate properties
     # TODO - simulation of movements, creation of mountains, etc
     # TODO - creation of a secondary hexmap which stores an altitude map instead of plates. Tones of grey I guess, black is deepest, white is highest.
     
     return grid # TODO - return altitude map instead of plate map. Or possibly both.
+
+def smoothen_faults(grid, cols, rows):
+    # TODO - smoothing of disconnected plate parts. 
+    return grid
+
+def detect_plates_and_faults(grid, cols, rows):
+    # TODO - detection of plates and faults
+    plates = []
+    faults = []
+    return plates, faults
 
 def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     """
