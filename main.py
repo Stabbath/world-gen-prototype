@@ -180,50 +180,6 @@ def generate_offset_grid(cols, rows):
             grid.append((col, row))
     return grid
 
-def spread_base(cols, rows, colors, grid_colored, plate_queues):
-    """
-    Spreads colors across the grid using BFS, without wrap-around ("flat world").
-
-    Parameters:
-        cols (int): Number of columns in the grid.
-        rows (int): Number of rows in the grid.
-        colors (List[Tuple[int, int, int]]): List of RGB color tuples representing different plates.
-        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with initial color assignments.
-        plate_queues (List[deque]): Queues for each plate to manage BFS.
-
-    Returns:
-        List[Tuple[int, int, Tuple[int, int, int]]]: Updated grid with colors spread across it.
-    """
-    # Spread colors using BFS for each plate
-    plates_active = len(colors)  # Number of plates still spreading
-
-    while plates_active > 0:
-        for i, color in enumerate(colors):
-            if not plate_queues[i]:
-                continue  # Plate has no more cells to spread
-
-            current_level_size = len(plate_queues[i])
-            for _ in range(current_level_size):
-                current_cell = plate_queues[i].popleft()
-                current_col, current_row = current_cell
-
-                # Get neighbors of the current cell
-                neighbors = get_neighbors(current_col, current_row, cols, rows)
-
-                for neighbor_col, neighbor_row in neighbors:
-                    neighbor_idx = neighbor_row * cols + neighbor_col
-                    if grid_colored[neighbor_idx][2] is None:
-                        # Assign the plate's color to the neighbor
-                        grid_colored[neighbor_idx] = (neighbor_col, neighbor_row, color)
-                        # Add the neighbor to the queue for further spreading
-                        plate_queues[i].append((neighbor_col, neighbor_row))
-
-            # Check if the plate's queue is empty after spreading
-            if not plate_queues[i]:
-                plates_active -= 1
-
-    return grid_colored
-
 def get_neighbors_wraparound(col, row, cols, rows):
     """
     Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
@@ -258,7 +214,7 @@ def get_neighbors_wraparound(col, row, cols, rows):
 
     return neighbors
 
-def spread_wraparound(cols, rows, colors, grid_colored, plate_queues):
+def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True):
     """
     Spreads colors across the grid using BFS, allowing horizontal wraparound.
 
@@ -278,23 +234,36 @@ def spread_wraparound(cols, rows, colors, grid_colored, plate_queues):
     while plates_active > 0:
         for i, color in enumerate(colors):
             if not plate_queues[i]:
-                continue  # Plate has no more cells to spread
+                continue  # Plate has no more cells to spread to
 
-            current_level_size = len(plate_queues[i])
-            for _ in range(current_level_size):
-                current_cell = plate_queues[i].popleft()
+            if individual_spread:
+                current_cell = popfunc(plate_queues[i])
                 current_col, current_row = current_cell
+                current_idx = current_row * cols + current_col
+                
+                # If not colored yet, assign the plate's color to the cell
+                if grid_colored[current_idx][2] is None:
+                    grid_colored[current_idx] = (current_col, current_row, color)
 
-                # Get neighbors with horizontal wraparound
-                neighbors = get_neighbors_wraparound(current_col, current_row, cols, rows)
-
-                for neighbor_col, neighbor_row in neighbors:
-                    neighbor_idx = neighbor_row * cols + neighbor_col
-                    if grid_colored[neighbor_idx][2] is None:
-                        # Assign the plate's color to the neighbor
-                        grid_colored[neighbor_idx] = (neighbor_col, neighbor_row, color)
-                        # Add the neighbor to the queue for further spreading
+                    # Get its neighbors, add them to the queue
+                    neighbors = neighborsfunc(current_col, current_row, cols, rows)
+                    for neighbor_col, neighbor_row in neighbors:
                         plate_queues[i].append((neighbor_col, neighbor_row))
+            else:
+                for _ in range(len(plate_queues[i])):
+                    current_cell = popfunc(plate_queues[i])
+                    current_col, current_row = current_cell
+                    current_idx = current_row * cols + current_col
+                    
+                    # If not colored yet, assign the plate's color to the cell
+                    if grid_colored[current_idx][2] is None:
+                        grid_colored[current_idx] = (current_col, current_row, color)
+    
+                        # Get its neighbors, add them to the queue
+                        neighbors = neighborsfunc(current_col, current_row, cols, rows)
+                        for neighbor_col, neighbor_row in neighbors:
+                            plate_queues[i].append((neighbor_col, neighbor_row))
+                
 
             # Check if the plate's queue is empty after spreading
             if not plate_queues[i]:
@@ -336,33 +305,47 @@ def assign_colors(grid, cols, rows):
     # Initialize neighbors queues for each plate
     plate_queues = [ deque() for _ in range(len(colors)) ]
 
-    # Assign initial colors (seeds) for each plate
+    # Add seed position for each plate to its queue
     for i, color in enumerate(colors):
         while True:
             rand_col = random.randint(0, cols - 1)
             rand_row = random.randint(0, rows - 1)
             rand_idx = rand_row * cols + rand_col
             if grid_colored[rand_idx][2] is None:
-                grid_colored[rand_idx] = (rand_col, rand_row, color)
                 plate_queues[i].append((rand_col, rand_row))
                 break  # Ensure unique initial seeds
+
+    def leftpop(l):
+        return l.popleft()
+
+    def randpop(l):
+        rand_index = random.randint(0, len(l) - 1)
+        value = l[rand_index]
+        del l[rand_index]
+        return value
+        
+    popfunc = randpop
+    individual_spread = False
 
     MODE_BASE = 1
     MODE_WRAPAROUND = 2
     mode = 2
     
     if mode == MODE_BASE:
-        return spread_base(cols, rows, colors, grid_colored, plate_queues)
+        return spread_generic(cols, rows, colors, grid_colored, plate_queues, get_neighbors, popfunc, individual_spread)
     elif mode == MODE_WRAPAROUND:
-        return spread_wraparound(cols, rows, colors, grid_colored, plate_queues)
+        return spread_generic(cols, rows, colors, grid_colored, plate_queues, get_neighbors_wraparound, popfunc, individual_spread)
     else:
         raise ValueError("Invalid spreading mode selected")
+        # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
+        # TODO - another idea: add a "scale" variable to each plate, which ranges from 0 to 1. When we would do an iteratioon for a plate, the "scale" is the percentage chance that we actually do the iteration; otherwise we skip it. Statistically, this means that e.g. a 0.5 scale will grow half as fast as a 1.0 scale.
+        
         
     # TODO - detect all fault lines, assign a fault type to each one
     # TODO - simulate the movements of our plates for a while and deform them appropriately on a 2D plane still
     # TODO - then level it up to a 3D plane, so we can add subduction etc and make tectonic mountains and pits
     # TODO - then add hot spots, volcanoes, and any other such extras. Maybe meteor craters too.
-    #   And that will conclude our Topology. 
+    #   And that will conclude our Topology. It could however be developed further by for example defining oceanic vs continental plates, or rock composition (and density), or plate age.
     #   - Step 2 would then be seas, oceans, rivers, lakes. Probably in conjunction with climate. For now, assume sea level is universally the same, ignore tides and tide differences between seas and stuff.
     #   - Step 3 would be climate, if not already done. But I think that goes hand in hand with 2.
     #   - Step 4 would then be erosion, finetuning topology based on the effect of climate.
@@ -402,8 +385,8 @@ def main():
     size = 20  # Adjust size as needed
 
     # Grid dimensions
-    cols = 100  # Number of columns
-    rows = 100  # Number of rows
+    cols = 200  # Number of columns
+    rows = 200  # Number of rows
 
     # Generate and assign colors to the grid
     grid = generate_offset_grid(cols, rows)
