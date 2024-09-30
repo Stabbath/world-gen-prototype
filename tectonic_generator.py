@@ -3,9 +3,6 @@ import random
 from collections import deque, defaultdict
 from neighbor_functions import get_neighbors_wraparound
 
-# Define constant for white color
-WHITE = (255, 255, 255)
-
 def leftpop(l):
     return l.popleft()
 
@@ -34,8 +31,8 @@ def generate_world(grid, cols, rows):
 
 def detect_plates_and_faults(grid_colored, cols, rows):
     """
-    Detects connected plates and fault lines, ensuring that each color represents a single connected plate.
-    Recolors any disconnected clusters to white.
+    Detects connected plates and fault lines, assuming each color represents a single connected plate.
+    Recolors any white cells remain unchanged.
 
     Parameters:
         grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with color assignments as (row, col, color).
@@ -43,88 +40,45 @@ def detect_plates_and_faults(grid_colored, cols, rows):
         rows (int): Number of rows in the grid.
 
     Returns:
-        Tuple[List[Tuple[int, int, Tuple[int, int, int]]], List[Set[Tuple[int, int]]], List[Set[Tuple[Tuple[int, int], Tuple[int, int]]]]]:
-            - Updated grid with corrected color assignments.
-            - List of plates, each represented as a set of (row, col) tuples.
-            - List of faults, each represented as a set of boundary cell pairs.
+        Tuple[
+            List[Tuple[int, int, Tuple[int, int, int]]],  # Updated grid with color assignments
+            List[Set[Tuple[int, int]]],                   # List of plates as sets of (row, col) tuples
+            List[Set[Tuple[Tuple[int, int], Tuple[int, int]]]]  # List of faults as sets of boundary cell pairs
+        ]
     """
     # Step 1: Convert grid_colored to a 2D grid for easier access
     grid = [[None for _ in range(cols)] for _ in range(rows)]
     for cell in grid_colored:
-        row, col, color = cell  # Changed order to (row, col, color)
+        row, col, color = cell  # (row, col, color)
         grid[row][col] = color
 
     # Step 2: Find all unique colors
     color_to_cells = defaultdict(set)
-    for row in range(rows):
-        for col in range(cols):
-            color = grid[row][col]
-            color_to_cells[color].add((row, col))  # Store as (row, col)
+    for row_idx in range(rows):
+        for col_idx in range(cols):
+            color = grid[row_idx][col_idx]
+            color_to_cells[color].add((row_idx, col_idx))  # (row, col)
 
-    # Step 3: For each color, find connected components
-    plates = []  # List of sets, each set contains (row, col) tuples
-    color_plate_mapping = defaultdict(list)  # color -> list of plate indices
-
+    # Step 3: Create plates assuming each color has only one connected cluster
+    plates = []
     for color, cells in color_to_cells.items():
-        if color == WHITE:
-            continue  # Skip white cells if they already exist
+        plates.append(cells)  # Each plate is a set of (row, col) tuples
 
-        visited = set()
-        clusters = []
-        for cell in cells:
-            if cell not in visited:
-                # Perform BFS to find all connected cells of this color
-                cluster = set()
-                queue = deque()
-                queue.append(cell)
-                visited.add(cell)
-                while queue:
-                    current = queue.popleft()
-                    cluster.add(current)
-                    neighbors = neighbors_func(current[1], current[0], cols, rows)  # (col, row)
-                    for neighbor in neighbors:
-                        neighbor_row, neighbor_col = neighbor[1], neighbor[0]  # Convert to (row, col)
-                        if grid[neighbor_row][neighbor_col] == color and (neighbor_row, neighbor_col) not in visited:
-                            visited.add((neighbor_row, neighbor_col))
-                            queue.append((neighbor_row, neighbor_col))
-                clusters.append(cluster)
-        
-        # Identify the largest cluster to retain the original color
-        if not clusters:
-            continue
-        clusters.sort(key=lambda x: len(x), reverse=True)
-        primary_cluster = clusters[0]
-        plates.append(primary_cluster)
-        primary_plate_index = len(plates) - 1
-        color_plate_mapping[color].append(primary_plate_index)
-
-        # Recolor smaller clusters to white
-        for cluster in clusters[1:]:
-            for cell in cluster:
-                row, col = cell
-                grid[row][col] = WHITE  # Recolor to white
-            # Optionally, you can keep track of these recolored clusters if needed
-            # plates.append(cluster)  # Not adding white regions as separate plates
-
-    # Step 4: Reconstruct grid_colored
-    updated_grid_colored = []
-    for row in range(rows):
-        for col in range(cols):
-            updated_grid_colored.append((row, col, grid[row][col]))  # (row, col, color)
+    # Step 4: Reconstruct grid_colored (unchanged since no recoloring is needed)
+    updated_grid_colored = grid_colored.copy()
 
     # Step 5: Identify fault lines (boundaries between plates)
     faults = []
     fault_pairs = set()
-    for row in range(rows):
-        for col in range(cols):
-            current_color = grid[row][col]
-            neighbors = neighbors_func(col, row, cols, rows)  # (col, row)
-            for neighbor in neighbors:
-                neighbor_col, neighbor_row = neighbor
+    for row_idx in range(rows):
+        for col_idx in range(cols):
+            current_color = grid[row_idx][col_idx]
+            neighbors = get_neighbors_wraparound(col_idx, row_idx, cols, rows)  # (col, row)
+            for neighbor_col, neighbor_row in neighbors:
                 neighbor_color = grid[neighbor_row][neighbor_col]
                 if neighbor_color != current_color:
                     # Create a sorted tuple to avoid duplicate pairs
-                    pair = tuple(sorted([ (row, col), (neighbor_row, neighbor_col) ]))
+                    pair = tuple(sorted([ (row_idx, col_idx), (neighbor_row, neighbor_col) ]))
                     fault_pairs.add(pair)
     # Convert fault_pairs to list of sets
     faults = [ set(pair) for pair in fault_pairs ]
