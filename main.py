@@ -141,18 +141,25 @@ def is_visible(pixel, size, screen_width, screen_height):
 def plate_to_color(plate_index):
     # Define colors representing tectonic plates
     colors = [
-        (255, 0, 0),       # Red
+        (255, 0, 0),       # Red - 1
         (0, 255, 0),       # Green
         (0, 0, 255),       # Blue
         (255, 255, 0),     # Yellow
         (255, 0, 255),     # Magenta
         (0, 255, 255),     # Cyan
-        (255, 165, 0),     # Orange
-        (128, 0, 128),     # Purple
+        (128, 0, 0),       # ?
         (0, 128, 0),       # Dark Green
-        (128, 128, 0),     # Olive
         (0, 0, 128),       # Navy
-        (255, 192, 203),   # Pink
+        (128, 128, 0),     # Olive - 10
+        (128, 0, 128),     # Purple
+        (0, 128, 128),     # ?
+        (255, 165, 0),     # Orange
+        (255, 0, 165),     # ?
+        (165, 255, 0),     # ?
+        (0, 255, 165),     # ?
+        (165, 0, 255),     # ?
+        (0, 165, 255),     # ?
+        (255, 192, 203),   # Pink- 19
     ]
     return colors[plate_index]
 
