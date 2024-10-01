@@ -167,7 +167,7 @@ def main():
 
     # Generate and assign colors to the grid
     grid = HexGrid(cols, rows)
-    grid = generate_world(grid, cols, rows)
+    grid = generate_world(grid)
 
     # Camera parameters
     camera_offset = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2]  # Start at center

@@ -1,5 +1,7 @@
+from functools import total_ordering
 from neighbor_functions import get_neighbors_wraparound
 
+@total_ordering
 class HexTile:
     def __init__(self, col, row, grid):
         self.col = col
@@ -22,6 +24,19 @@ class HexTile:
         for x, y in coord_tuples:
             neighbors.append(self.grid.get_tile(x, y))
         return neighbors
+    
+    def __eq__(self, other):
+        if not isinstance(other, HexTile):
+            return NotImplemented
+        return (self.col, self.row) == (other.col, other.row)
+
+    def __lt__(self, other):
+        if not isinstance(other, HexTile):
+            return NotImplemented
+        return (self.col, self.row) < (other.col, other.row)
+
+    def __hash__(self):
+        return hash((self.col, self.row))
 
 class HexGrid:
     def __init__(self, width, height):

@@ -17,11 +17,11 @@ popfunc = randpop
 individual_spread = False
 growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
-def generate_world(grid, cols, rows):
+def generate_world(grid):
     grid = plate_method(grid, 12)  # TODO - gui's alternative would be here instead of plate_method
     
     # NOTE - if we need optimization later, detection should be made a part of the plate_method (or fault_method)
-    plates, faults = detect_plates_and_faults(grid, cols, rows)
+    plates, faults = detect_plates_and_faults(grid)
     grid.set_plates(plates)
     grid.set_faults(faults)
     
