@@ -2,8 +2,8 @@ import pygame
 import sys
 import math
 
+from hexgrid import HexGrid
 from tectonic_generator import generate_world
-
 
 # Initialize Pygame
 pygame.init()
@@ -121,23 +121,6 @@ def pixel_to_offset(x, y, size, camera_offset, scale, cols, rows):
 
     return (col, row)
 
-def generate_offset_grid(cols, rows):
-    """
-    Generates a list of grid cells as (col, row) tuples.
-
-    Parameters:
-        cols (int): Number of columns.
-        rows (int): Number of rows.
-
-    Returns:
-        List[Tuple[int, int]]: List of (col, row) tuples.
-    """
-    grid = []
-    for row in range(rows):
-        for col in range(cols):
-            grid.append((col, row))
-    return grid
-
 def is_visible(pixel, size, screen_width, screen_height):
     """
     Checks if a hexagon is within the visible screen area with a buffer.
@@ -155,6 +138,25 @@ def is_visible(pixel, size, screen_width, screen_height):
     buffer = size * 2
     return (-buffer < x < screen_width + buffer) and (-buffer < y < screen_height + buffer)
 
+def plate_to_color(plate_index):
+    # Define colors representing tectonic plates
+    colors = [
+        (255, 0, 0),       # Red
+        (0, 255, 0),       # Green
+        (0, 0, 255),       # Blue
+        (255, 255, 0),     # Yellow
+        (255, 0, 255),     # Magenta
+        (0, 255, 255),     # Cyan
+        (255, 165, 0),     # Orange
+        (128, 0, 128),     # Purple
+        (0, 128, 0),       # Dark Green
+        (128, 128, 0),     # Olive
+        (0, 0, 128),       # Navy
+        (255, 192, 203),   # Pink
+    ]
+    return colors[plate_index]
+
+
 def main():
     # Hexagon size
     size = 20  # Adjust size as needed
@@ -164,7 +166,7 @@ def main():
     rows = 200  # Number of rows
 
     # Generate and assign colors to the grid
-    grid = generate_offset_grid(cols, rows)
+    grid = HexGrid(cols, rows)
     grid = generate_world(grid, cols, rows)
 
     # Camera parameters
@@ -214,8 +216,9 @@ def main():
         screen.fill((0, 0, 0))  # Black background
 
         # Draw hexagons
-        for cell in grid:
-            col, row, color = cell
+        for cell in grid.get_tiles():
+            row, col = cell.get_coords() # bandaid fix for wrong neighbors
+            color = plate_to_color(cell.get_plate_index())
             pixel = offset_to_pixel(col, row, size, camera_offset, scale)
             if is_visible(pixel, size * scale, SCREEN_WIDTH, SCREEN_HEIGHT):
                 draw_hexagon(screen, color, pixel, size * scale, width=0)
