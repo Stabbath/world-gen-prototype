@@ -40,3 +40,9 @@ class HexGrid:
     
     def set_tile(self, col, row, tile):
         self.tiles[col + row * self.width] = tile
+        
+    def set_plates(self, plates):
+        self.plates = plates
+        
+    def set_faults(self, faults):
+        self.faults = faults

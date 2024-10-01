@@ -20,54 +20,52 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 def generate_world(grid, cols, rows):
     grid = plate_method(grid, 12)  # TODO - gui's alternative would be here instead of plate_method
     
-    # NOTE - if we need optimization later, smoothen and detection should be made a part of the plate_method (or fault_method)
-    #grid, plates, faults = detect_plates_and_faults(grid, cols, rows)
-
+    # NOTE - if we need optimization later, detection should be made a part of the plate_method (or fault_method)
+    plates, faults = detect_plates_and_faults(grid, cols, rows)
+    grid.set_plates(plates)
+    grid.set_faults(faults)
+    
     # TODO - fault line and plate properties
     # TODO - simulation of movements, creation of mountains, etc
     # TODO - creation of a secondary hexmap which stores an altitude map instead of plates. Tones of grey I guess, black is deepest, white is highest.
     
     return grid  # TODO - return altitude map instead of plate map. Or possibly both.
 
-def detect_plates_and_faults(grid_colored, cols, rows):
-    # Step 1: Convert grid_colored to a 2D grid for easier access
-    grid = [[None for _ in range(cols)] for _ in range(rows)]
-    for cell in grid_colored:
-        row, col, color = cell  # (row, col, color)
-        grid[row][col] = color
-
-    # Step 2: Find all unique colors
-    color_to_cells = defaultdict(set)
+def detect_plates_and_faults(grid):
+    cols = grid.width
+    rows = grid.height
+    
+    # Step 1: Find all unique plate indices
+    plate_to_cells = defaultdict(set)
     for row_idx in range(rows):
         for col_idx in range(cols):
-            color = grid[row_idx][col_idx]
-            color_to_cells[color].add((row_idx, col_idx))  # (row, col)
+            tile = grid.get_tile(col_idx, row_idx)
+            plate = tile.get_plate_index()
+            plate_to_cells[plate].add(tile)
 
-    # Step 3: Create plates assuming each color has only one connected cluster
+    # Step 2: Create plates assuming each color has only one connected cluster
     plates = []
-    for color, cells in color_to_cells.items():
-        plates.append(cells)  # Each plate is a set of (row, col) tuples
+    for plate_index, cells in plate_to_cells.items():
+        plates.append(cells)  # Each plate is a set of hextiles
 
-    # Step 4: Reconstruct grid_colored (unchanged since no recoloring is needed)
-    updated_grid_colored = grid_colored.copy()
-
-    # Step 5: Identify fault lines (boundaries between plates)
+    # Step 3: Identify fault lines (boundaries between plates)
     faults = []
     fault_pairs = set()
     for row_idx in range(rows):
         for col_idx in range(cols):
-            current_color = grid[row_idx][col_idx]
-            neighbors = get_neighbors_wraparound(col_idx, row_idx, cols, rows)  # (col, row)
-            for neighbor_col, neighbor_row in neighbors:
-                neighbor_color = grid[neighbor_row][neighbor_col]
-                if neighbor_color != current_color:
+            tile = grid.get_tile(col_idx, row_idx)
+            current_plate = tile.get_plate_index()
+
+            for neighbor in tile.get_neighbors():
+                neighbor_plate = neighbor.get_plate_index()
+                if neighbor_plate != current_plate:
                     # Create a sorted tuple to avoid duplicate pairs
-                    pair = tuple(sorted([ (row_idx, col_idx), (neighbor_row, neighbor_col) ]))
+                    pair = tuple(sorted([ tile, neighbor ]))
                     fault_pairs.add(pair)
     # Convert fault_pairs to list of sets
     faults = [ set(pair) for pair in fault_pairs ]
 
-    return updated_grid_colored, plates, faults
+    return plates, faults
 
 def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     # Spread colors using BFS for each plate with horizontal wraparound
