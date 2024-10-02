@@ -1,142 +1,135 @@
+# file: tectonic_generator.py
 import random
-from collections import deque
+from collections import deque, defaultdict
 from neighbor_functions import get_neighbors_wraparound
 
-def generate_world(grid, cols, rows):
-    grid = plate_method(grid, cols, rows) # TODO - gui's alternative would be here instead of plate_method
-    # TODO - smoothing of disconnected plate parts. Then detection of fault lines and plates - if we need otpimization later, these should be made a part of the plate_method (or fault_method), and returned by those functions.
+def leftpop(l):
+    return l.popleft()
 
+def randpop(l):
+    rand_index = random.randint(0, len(l) - 1)
+    value = l[rand_index]
+    del l[rand_index]
+    return value
+    
+neighbors_func = get_neighbors_wraparound  # or get_neighbors
+popfunc = randpop
+individual_spread = False
+growth_scales = None  # [1.0] * 8 + [0.5] * 4
+
+def generate_world(grid):
+    grid = plate_method(grid, 12)  # TODO - gui's alternative would be here instead of plate_method
+    
+    # NOTE - if we need optimization later, detection should be made a part of the plate_method (or fault_method)
+    plates, faults = detect_plates_and_faults(grid)
+    grid.set_plates(plates)
+    grid.set_faults(faults)
+    
     # TODO - fault line and plate properties
     # TODO - simulation of movements, creation of mountains, etc
     # TODO - creation of a secondary hexmap which stores an altitude map instead of plates. Tones of grey I guess, black is deepest, white is highest.
     
-    return grid # TODO - return altitude map instead of plate map. Or possibly both.
+    return grid  # TODO - return altitude map instead of plate map. Or possibly both.
 
-def spread_generic(cols, rows, colors, grid_colored, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
-    """
-    Spreads colors across the grid using BFS.
+def detect_plates_and_faults(grid):
+    cols = grid.width
+    rows = grid.height
+    
+    # Step 1: Find all unique plate indices
+    plate_to_cells = defaultdict(set)
+    for row_idx in range(rows):
+        for col_idx in range(cols):
+            tile = grid.get_tile(col_idx, row_idx)
+            plate = tile.get_plate_index()
+            plate_to_cells[plate].add(tile)
 
-    Parameters:
-        cols (int): Number of columns in the grid.
-        rows (int): Number of rows in the grid.
-        colors (List[Tuple[int, int, int]]): List of RGB color tuples representing different plates.
-        grid_colored (List[Tuple[int, int, Tuple[int, int, int]]]): Grid with initial color assignments.
-        plate_queues (List[deque]): Queues for each plate to manage BFS.
-        neighborsfunc (function): function which takes a cell and returns an array containing its neighbors.
-        popfunc (function): function which takes a list and removes and returns one of its elements
-        individual_spread (boolean): if True, we process 1 tile of plate expansion per color at each iteration, rather than a neighborhood
-        growth_scales (List[double]): for each plate, the probability that we skip its expansion in each iteration, causing it to expand more slowly than the others.
+    # Step 2: Create plates assuming each color has only one connected cluster
+    plates = []
+    for plate_index, cells in plate_to_cells.items():
+        plates.append(cells)  # Each plate is a set of hextiles
 
-    Returns:
-        List[Tuple[int, int, Tuple[int, int, int]]]: Updated grid with colors spread across it.
-    """
+    # Step 3: Identify fault lines (boundaries between plates)
+    faults = []
+    fault_pairs = set()
+    for row_idx in range(rows):
+        for col_idx in range(cols):
+            tile = grid.get_tile(col_idx, row_idx)
+            current_plate = tile.get_plate_index()
+
+            for neighbor in tile.get_neighbors():
+                neighbor_plate = neighbor.get_plate_index()
+                if neighbor_plate != current_plate:
+                    # Create a sorted tuple to avoid duplicate pairs
+                    pair = tuple(sorted([ tile, neighbor ]))
+                    fault_pairs.add(pair)
+    # Convert fault_pairs to list of sets
+    faults = [ set(pair) for pair in fault_pairs ]
+
+    return plates, faults
+
+def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     # Spread colors using BFS for each plate with horizontal wraparound
-    plates_active = len(colors)  # Number of plates still spreading
+    plates_active = len(plate_queues)  # Number of plates still spreading
 
     while plates_active > 0:
-        for i, color in enumerate(colors):
-            if not plate_queues[i]:
+        for plate_index in range(len(plate_queues)):
+            if not plate_queues[plate_index]:
                 continue  # Plate has no more cells to spread to
                 
             # Statistical growth scale - % chance to grow or not grow each iteration
             if growth_scales is not None:
-                if random.random() > growth_scales[i]:
+                if random.random() > growth_scales[plate_index]:
                     continue
 
+            # individual spread: one at a time per plate
             if individual_spread:
-                current_cell = popfunc(plate_queues[i])
-                current_col, current_row = current_cell
-                current_idx = current_row * cols + current_col
+                tile = popfunc(plate_queues[plate_index])
+                col, row = tile.get_coords()
                 
                 # If not colored yet, assign the plate's color to the cell
-                if grid_colored[current_idx][2] is None:
-                    grid_colored[current_idx] = (current_col, current_row, color)
+                if tile.get_plate_index() is None:
+                    tile.set_plate_index(plate_index)
 
                     # Get its neighbors, add them to the queue
-                    neighbors = neighborsfunc(current_col, current_row, cols, rows)
-                    for neighbor_col, neighbor_row in neighbors:
-                        plate_queues[i].append((neighbor_col, neighbor_row))
+                    for neighbor in tile.get_neighbors():
+                        plate_queues[plate_index].append(neighbor)
             else:
-                for _ in range(len(plate_queues[i])):
-                    current_cell = popfunc(plate_queues[i])
-                    current_col, current_row = current_cell
-                    current_idx = current_row * cols + current_col
+                # non-individual spread: "clear" the queue for each plate one at a time, i.e. BFS (although not BFS if we use any pop other than leftpop)
+                for _ in range(len(plate_queues[plate_index])):
+                    tile = popfunc(plate_queues[plate_index])
+                    col, row = tile.get_coords()
                     
-                    # If not colored yet, assign the plate's color to the cell
-                    if grid_colored[current_idx][2] is None:
-                        grid_colored[current_idx] = (current_col, current_row, color)
-    
+                    # If not assigned yet, assign
+                    if tile.get_plate_index() is None:
+                        tile.set_plate_index(plate_index)
+
                         # Get its neighbors, add them to the queue
-                        neighbors = neighborsfunc(current_col, current_row, cols, rows)
-                        for neighbor_col, neighbor_row in neighbors:
-                            plate_queues[i].append((neighbor_col, neighbor_row))
-                
+                        for neighbor in tile.get_neighbors():
+                            plate_queues[plate_index].append(neighbor)
 
             # Check if the plate's queue is empty after spreading
-            if not plate_queues[i]:
+            if not plate_queues[plate_index]:
                 plates_active -= 1
 
-    return grid_colored
+    return grid
 
-def plate_method(grid, cols, rows):
-    """
-    Assigns colors to the grid cells simulating tectonic plate spreading.
-
-    Parameters:
-        grid (List[Tuple[int, int]]): List of grid cells as (col, row) tuples.
-        cols (int): Number of columns.
-        rows (int): Number of rows.
-
-    Returns:
-        List[Tuple[int, int, tuple]]: List of (col, row, color) tuples.
-    """
-    # Define colors representing tectonic plates
-    colors = [
-        (255, 0, 0),       # Red
-        (0, 255, 0),       # Green
-        (0, 0, 255),       # Blue
-        (255, 255, 0),     # Yellow
-        (255, 0, 255),     # Magenta
-        (0, 255, 255),     # Cyan
-        (255, 165, 0),     # Orange
-        (128, 0, 128),     # Purple
-        (0, 128, 0),       # Dark Green
-        (128, 128, 0),     # Olive
-        (0, 0, 128),       # Navy
-        (255, 192, 203),   # Pink
-    ]
-
-    # Initialize grid with no colors
-    grid_colored = [ (col, row, None) for (col, row) in grid ]
-
+def plate_method(grid, plate_count):
     # Initialize neighbors queues for each plate
-    plate_queues = [ deque() for _ in range(len(colors)) ]
+    plate_queues = [ deque() for _ in range(plate_count) ]
+
+    cols = grid.width
+    rows = grid.height
 
     # Add seed position for each plate to its queue
-    for i, color in enumerate(colors):
+    for i in range(plate_count):
         while True:
             rand_col = random.randint(0, cols - 1)
             rand_row = random.randint(0, rows - 1)
-            rand_idx = rand_row * cols + rand_col
-            if grid_colored[rand_idx][2] is None:
-                plate_queues[i].append((rand_col, rand_row))
+            tile = grid.get_tile(rand_col, rand_row)
+            if tile.get_plate_index() is None:
+                plate_queues[i].append(tile)
                 break  # Ensure unique initial seeds
-
-    def leftpop(l):
-        return l.popleft()
-
-    def randpop(l):
-        rand_index = random.randint(0, len(l) - 1)
-        value = l[rand_index]
-        del l[rand_index]
-        return value
-        
-    neighbors_func = get_neighbors_wraparound # or get_neighbors
-    popfunc = randpop
-    individual_spread = False
-    growth_scales = None # [1.0] * 8 + [0.5] * 4
-    
-    return spread_generic(cols, rows, colors, grid_colored, plate_queues, neighbors_func, popfunc, individual_spread, growth_scales)
+    return spread_generic(grid, plate_queues, neighbors_func, popfunc, individual_spread, growth_scales)
         # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
         # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
         

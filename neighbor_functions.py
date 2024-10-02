@@ -64,14 +64,13 @@ def get_neighbors_wraparound(col, row, cols, rows):
     else:
         deltas = ODD_Q_NEIGHBORS
 
-    # Calculate neighbor positions with wraparound for columns
+    # Calculate neighbor positions with wraparound for rows
     for dc, dr in deltas:
-        # Wrap the column index
-        neighbor_col = (col + dc) % cols
-        neighbor_row = row + dr
+        neighbor_col = col + dc
+        neighbor_row = (row + dr) % rows  # Wrap around rows vertically
 
-        # Check if the neighbor row is within bounds
-        if 0 <= neighbor_row < rows:
+        # Check if the neighbor column is within bounds (no wraparound horizontally)
+        if 0 <= neighbor_col < cols:
             neighbors.append((neighbor_col, neighbor_row))
 
     return neighbors
