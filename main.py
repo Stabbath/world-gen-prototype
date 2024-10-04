@@ -5,7 +5,7 @@ import traceback
 import random
 from camera import Camera
 from hex_board_generator import HexGrid
-from map_generator import generate_world_faults, generate_world_plates
+from map_generator import generate_map
 
 # ------------------------------
 # Constants and Configurations
@@ -14,7 +14,8 @@ from map_generator import generate_world_faults, generate_world_plates
 # Screen settings
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 800
-BACKGROUND_COLOR = (255, 255, 255)  # White background
+BACKGROUND_COLOR = (0, 0, 0)  # White background
+FPS = 60 # CAP the frame rate at 60 FPS
 
 # Hexagon settings
 HEX_SIZE = 20  # Adjusted size
@@ -97,19 +98,18 @@ def main():
         # Create the hex grid
         hex_grid = HexGrid(cols=INITIAL_GRID_COLS, rows=INITIAL_GRID_ROWS, size=HEX_SIZE, offset_x=100, offset_y=100)
 
-        # Function to regenerate the map
-        def regenerate_map():
-            nonlocal hex_grid
-            hex_grid = HexGrid(cols=INITIAL_GRID_COLS, rows=INITIAL_GRID_ROWS, size=HEX_SIZE, offset_x=100, offset_y=100)
-            if GEN_METHOD == 0:
-                generate_world_faults(hex_grid, n_selected=INITIAL_N_SELECTED_TILES)
-                print("Generated world using fault-based method.")
-            else:
-                generate_world_plates(hex_grid, plate_count=12)
-                print("Generated world using plate-based method.")
+        
 
         # Initial map generation
-        regenerate_map()
+        hex_grid = generate_map(
+        GEN_METHOD,
+        cols=INITIAL_GRID_COLS,
+        rows=INITIAL_GRID_ROWS,
+        size=HEX_SIZE,
+        offset_x=100,
+        offset_y=100,
+        n_selected=INITIAL_N_SELECTED_TILES
+    )
 
         # Main loop flag
         running = True
@@ -145,7 +145,15 @@ def main():
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
                         # Regenerate the map
-                        regenerate_map()
+                        hex_grid = generate_map(
+                        GEN_METHOD,
+                        cols=INITIAL_GRID_COLS,
+                        rows=INITIAL_GRID_ROWS,
+                        size=HEX_SIZE,
+                        offset_x=100,
+                        offset_y=100,
+                        n_selected=INITIAL_N_SELECTED_TILES
+                    )
 
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
@@ -158,7 +166,7 @@ def main():
             pygame.display.flip()
 
             # Cap the frame rate at 60 FPS
-            clock.tick(60)
+            clock.tick(FPS)
 
     except Exception as e:
         print("An error occurred:", e)

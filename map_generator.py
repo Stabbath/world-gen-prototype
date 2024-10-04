@@ -1,6 +1,8 @@
 import random
 from collections import deque, defaultdict
 from neighbor_functions import get_neighbors, get_neighbors_wraparound
+from hex_board_generator import HexGrid
+
 
 # Constants used in the generation methods
 DIRECTIONS = ['N', 'NE', 'SE', 'S', 'SW', 'NW']
@@ -31,6 +33,20 @@ ADJACENT_DIRECTIONS = {
 BRANCHING_CHANCE = 0.1
 MAX_BRANCH_DEPTH = 2
 STOP_ON_INTERSECTION = True  # As in original code
+
+# Number of tiles to select for fault generation
+INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
+
+# Function to regenerate the map
+def generate_map(gen_method=0, cols=50, rows=50, size=20, offset_x=100, offset_y=100, n_selected=12):
+    hex_grid = HexGrid(cols=cols, rows=rows, size=size, offset_x=offset_x, offset_y=offset_y)
+    if gen_method == 0:
+        generate_world_faults(hex_grid, n_selected=INITIAL_N_SELECTED_TILES)
+        print("Generated world using fault-based method.")
+    else:
+        generate_world_plates(hex_grid, plate_count=12)
+        print("Generated world using plate-based method.")
+    return hex_grid
 
 def generate_world_faults(hex_grid, n_selected=12):
     # Select boundary tiles
