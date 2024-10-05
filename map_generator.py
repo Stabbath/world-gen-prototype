@@ -1,7 +1,7 @@
 from neighbor_functions import get_neighbors_wraparound
 from hex_grid import HexGrid
-from tectonic_generator_faults import generate_world_faults
-from tectonic_generator_plates import generate_world_plates
+from generators.tectonic_generator_faults import generate_world_faults
+from generators.tectonic_generator_plates import generate_world_plates
 
 # Number of tiles to select for fault generation
 INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
