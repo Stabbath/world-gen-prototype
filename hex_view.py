@@ -78,9 +78,27 @@ def color_generator(index):
     
     return color
 
+# TODO - this function should be passed into the HexViewTile from outside. We pass a different function for the Altitude map, and a different one for Hydrological, etc
+def get_colors(viewTile):
+    if viewTile.tile.is_selected or viewTile.tile.is_line or viewTile.tile.fault_index is not None:
+        fill_color = color_dict['line_hex']
+        outline_color = color_dict['line_outline']
+        label_color = color_dict['line_label']
+    elif viewTile.tile.continent_label is not None:
+        fill_color = viewTile.gridview.grid.continent_colors[viewTile.tile.continent_label] # TODO - should just one color array/fetch function. Check with Gui what his goal with this specific colour scheme was.
+        outline_color = color_dict['default_outline']
+        label_color = color_dict['default_label']
+    elif viewTile.tile.plate_index is not None:
+        fill_color = color_generator(viewTile.tile.plate_index)
+        outline_color = color_dict['default_outline']
+        label_color = color_dict['default_label']
+    else:
+        fill_color = color_dict['default_hex']
+        outline_color = color_dict['default_outline']
+        label_color = color_dict['default_label']
+    return fill_color, outline_color, label_color
+
 class HexViewTile:
-    is_selected = False
-    
     def __init__(self, tile, center, size, gridview):
         self.tile = tile
         self.center = pygame.math.Vector2(center)
@@ -100,22 +118,7 @@ class HexViewTile:
     
     def draw(self, screen, camera):
         # Determine colors based on tile status
-        if self.is_selected or self.tile.is_line or self.tile.fault_index is not None:
-            fill_color = color_dict['line_hex']
-            outline_color = color_dict['line_outline']
-            label_color = color_dict['line_label']
-        elif self.tile.continent_label is not None:
-            fill_color = self.gridview.grid.continent_colors[self.tile.continent_label] # TODO - should just one color array/fetch function. Check with Gui what his goal with this specific colour scheme was.
-            outline_color = color_dict['default_outline']
-            label_color = color_dict['default_label']
-        elif self.tile.plate_index is not None:
-            fill_color = color_generator(self.tile.plate_index)
-            outline_color = color_dict['default_outline']
-            label_color = color_dict['default_label']
-        else:
-            fill_color = color_dict['default_hex']
-            outline_color = color_dict['default_outline']
-            label_color = color_dict['default_label']
+        fill_color, outline_color, label_color = get_colors(self)
 
         # Get transformed corners
         world_corners = self.get_corners()

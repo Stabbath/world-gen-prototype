@@ -44,11 +44,18 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wraparound):
     grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
     
+    # === Step 1: Generation of Plates and Faults === 
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
     # Straightforward - when we're expanding our plates and run into a filled neighbor, we turn the tile into a fault.
-    grid.plates, grid.faults = detect_plates_and_faults(grid)
+    plates, faults = detect_plates_and_faults(grid)
+    grid.set_plates_from_lists(plates)
+    grid.set_faults_from_lists(faults)
     
+    # === Step 2: Assignment of Fault and/or Plate Properties ===
     # TODO - fault line and plate properties
+    
+    # === Step 3: Altitude Map Generation ===
+    # TODO - create a clone hexgrid, or a dictionary of properties indexed by tileId, to avoid littering the grid with properties, for now
     # TODO - simulation of movements, creation of mountains, etc
     # TODO - creation of a secondary hexmap which stores an altitude map instead of plates. Tones of grey I guess, black is deepest, white is highest.
     

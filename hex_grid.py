@@ -1,14 +1,20 @@
 from functools import total_ordering
-from collections import defaultdict
 
+# TODO - probably need an id for plates and faults. Simplest is probably to use uuid()
 class Plate:
     tiles = []
     
+    def __init__(self, tiles):
+        self.tiles = tiles
+        
     def set_tiles(self, tiles):
         self.tiles = tiles
     
 class Fault:
     tiles = []
+    
+    def __init__(self, tiles):
+        self.tiles = tiles
     
     def set_tiles(self, tiles):
         self.tiles = tiles
@@ -89,3 +95,12 @@ class HexGrid:
     def set_tile(self, col, row, tile):
         self.tiles[col + row * self.width] = tile
 
+    def set_plates_from_lists(self, plates):
+        self.plates = []
+        for plate in plates:
+            self.plates.append(Plate(plate));
+
+    def set_faults_from_lists(self, faults):
+        self.faults = []
+        for fault in faults:
+            self.faults.append(Fault(fault));
