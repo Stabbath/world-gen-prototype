@@ -1,9 +1,45 @@
 import math
 import pygame
 
+# Colors (default values)
+DEFAULT_HEX_COLOR = (173, 216, 230)               # Light blue (ocean)
+DEFAULT_OUTLINE_COLOR = (0, 0, 0)                 # Black
+LABEL_COLOR = (255, 255, 255)        # White
+
+LINE_HEX_COLOR = (0, 0, 0)                 # Black (fault lines)
+LINE_LABEL_COLOR = (255, 255, 255)        # White
+LINE_OUTLINE_COLOR = (255, 255, 255)      # White
+
+color_dict = {
+    'default_hex':  DEFAULT_HEX_COLOR,
+    'default_outline':  DEFAULT_OUTLINE_COLOR,
+    'default_label':  LABEL_COLOR,
+    'line_hex':  LINE_HEX_COLOR,
+    'line_outline':  LINE_OUTLINE_COLOR,
+    'line_label':  LINE_LABEL_COLOR
+}
+
+# Font settings
+FONT_NAME = None  # Default font
+BASE_FONT_SIZE = 14  # Base font size for hex labels
+
+font_dict = {
+    'base_size':  14,
+    'base_name':  FONT_NAME
+}
+
+def text_label_from_tile(tile):
+    if tile.fault_index != None:
+        return None
+        return str(tile.fault_index)
+    return None
+
 def color_generator(index):
+    if index is None: # fault
+        return (0,0,0)
+    
     # Total combinations: 6x7 = 42. Change this if the multipliers array is changed
-    if index >= 30:
+    if index >= 42:
         return (255, 255, 255) # return White if out of bounds
         
     matrices = [
@@ -52,6 +88,7 @@ class HexViewTile:
         self.gridview = gridview
 
     def get_corners(self):
+        # TODO can optimize this by buffering the result in a class variable and only initializing it when first called
         corners = []
         for i in range(6):
             angle_deg = 60 * i  # Flat-topped hexagons
@@ -61,9 +98,9 @@ class HexViewTile:
             corners.append((x, y))
         return corners
     
-    def draw(self, screen, camera, color_dict, font_dict):
+    def draw(self, screen, camera):
         # Determine colors based on tile status
-        if self.is_selected or self.tile.is_line:
+        if self.is_selected or self.tile.is_line or self.tile.fault_index is not None:
             fill_color = color_dict['line_hex']
             outline_color = color_dict['line_outline']
             label_color = color_dict['line_label']
@@ -89,22 +126,18 @@ class HexViewTile:
         # Draw hexagon outline
         pygame.draw.polygon(screen, outline_color, screen_corners, 2)
     
-        # # Prepare label
-        # label = f"({self.tile.col},{self.tile.row})"
-        # if self.tile.continent_label is not None:
-        #     label += f" {self.tile.continent_label}"
-        # elif self.tile.plate_index is not None:
-        #     label += f" P{self.tile.plate_index}"
-    
-        # # Font size for labels scales with zoom
-        # adjusted_font_size = max(int(font_dict['base_size'] * camera.zoom), 8)
-        # try:
-        #     adjusted_font = pygame.font.SysFont(font_dict['base_name'], adjusted_font_size)
-        # except:
-        #     adjusted_font = pygame.font.Font(None, adjusted_font_size)
-        # text_surface = adjusted_font.render(label, True, label_color)
-        # text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
-        # screen.blit(text_surface, text_rect)
+        # Prepare label
+        label = text_label_from_tile(self.tile)
+        if label is not None:
+            # Font size for labels scales with zoom
+            adjusted_font_size = max(int(font_dict['base_size'] * camera.zoom), 8)
+            try:
+                adjusted_font = pygame.font.SysFont(font_dict['base_name'], adjusted_font_size)
+            except:
+                adjusted_font = pygame.font.Font(None, adjusted_font_size)
+            text_surface = adjusted_font.render(label, True, label_color)
+            text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
+            screen.blit(text_surface, text_rect)
         
 
 class HexView:
@@ -132,7 +165,7 @@ class HexView:
             for tile in hexgrid.tiles
         ]
         
-    def draw(self, screen, camera, color_dict, font_dict):
+    def draw(self, screen, camera):
         for tile in self.tiles:
-            tile.draw(screen, camera, color_dict, font_dict)
+            tile.draw(screen, camera)
         

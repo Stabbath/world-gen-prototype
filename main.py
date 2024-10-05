@@ -3,7 +3,6 @@ import pygame
 import sys
 import traceback
 from camera import Camera
-from hex_grid import HexGrid
 from hex_view import HexView
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
@@ -28,37 +27,6 @@ HORIZONTAL_SPACING = HEX_WIDTH * 0.75  # Flat-topped hexagons overlap horizontal
 # Initial Grid settings
 INITIAL_GRID_COLS = 50  # Increased grid size for better visual effect
 INITIAL_GRID_ROWS = 50  # Increased grid size for better visual effect
-
-# Colors (default values)
-DEFAULT_HEX_COLOR = (173, 216, 230)               # Light blue (ocean)
-DEFAULT_OUTLINE_COLOR = (0, 0, 0)                 # Black
-LABEL_COLOR = (255, 255, 255)        # White
-
-SELECTED_HEX_COLOR = (0, 0, 0)             # Black
-SELECTED_LABEL_COLOR = (255, 255, 255)    # White
-SELECTED_OUTLINE_COLOR = (255, 255, 255)  # White
-
-LINE_HEX_COLOR = (0, 0, 0)                 # Black (fault lines)
-LINE_LABEL_COLOR = (255, 255, 255)        # White
-LINE_OUTLINE_COLOR = (255, 255, 255)      # White
-
-color_dict = {
-    'default_hex':  DEFAULT_HEX_COLOR,
-    'default_outline':  DEFAULT_OUTLINE_COLOR,
-    'default_label':  LABEL_COLOR,
-    'line_hex':  LINE_HEX_COLOR,
-    'line_outline':  LINE_OUTLINE_COLOR,
-    'line_label':  LINE_LABEL_COLOR
-}
-
-# Font settings
-FONT_NAME = None  # Default font
-BASE_FONT_SIZE = 14  # Base font size for hex labels
-
-font_dict = {
-    'base_size':  14,
-    'base_name':  FONT_NAME
-}
 
 # Zoom settings
 ZOOM_STEP = 1.1  # Zoom in/out factor per mouse wheel event
@@ -154,7 +122,7 @@ def main():
 
             # Draw the hex grid with labels
             if hex_view:
-                hex_view.draw(screen, camera, color_dict, font_dict)
+                hex_view.draw(screen, camera)
 
             # Update the display
             pygame.display.flip()

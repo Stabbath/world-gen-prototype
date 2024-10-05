@@ -46,7 +46,7 @@ def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wra
     
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
     # Straightforward - when we're expanding our plates and run into a filled neighbor, we turn the tile into a fault.
-    plates, faults = detect_plates_and_faults(grid)
+    grid.plates, grid.faults = detect_plates_and_faults(grid)
     
     # TODO - fault line and plate properties
     # TODO - simulation of movements, creation of mountains, etc
@@ -84,14 +84,14 @@ def detect_plates_and_faults(grid):
                 neighbor_plate = neighbor.get_plate_index()
                 
                 # If neighbor is a different plate and not already a fault
-                if neighbor_plate != tile.get_plate_index() and neighbor_plate != -1:
+                if neighbor_plate != tile.get_plate_index() and neighbor_plate is not None:
                     is_border_tile = True
                     break
             
             if is_border_tile:
                 plate.remove(tile)  # Remove the tile from its current plate
                 fault_tiles.add(tile)  # Add the tile to the fault_tiles set
-                tile.set_plate_index(-1)  # Set the tile's plate index to -1 to mark it as a fault
+                tile.set_plate_index(None)  # Set the tile's plate index to None to mark it as a fault
     
     # Step 4: Smoothing
     # Reduce the faults to the bare minimum to separate plates.
@@ -101,93 +101,141 @@ def detect_plates_and_faults(grid):
     # Step 5: Create specific fault lines from the fault tiles.
     # Each sequence of fault tiles between 2 junctions is a fault line. After smoothing, a junction is simply a fault tile with more than 2 fault tile neighbors.
     faults = []  # List to store fault lines
-    
-    # Build adjacency list of fault tiles
-    fault_adjacency = defaultdict(list)
+
+    # Identify fault junction tiles (tiles with more than 2 neighboring fault tiles)
+    fault_junction_tiles = set()
     for tile in fault_tiles:
-        neighbors = tile.get_neighbors()
-        for neighbor in neighbors:
-            if neighbor in fault_tiles:
-                fault_adjacency[tile].append(neighbor)
-    
-    # Identify junctions and endpoints
-    junctions = set()
-    endpoints = set()
-    for tile, neighbors in fault_adjacency.items():
-        degree = len(neighbors)
-        if degree > 2:
-            junctions.add(tile)
-        elif degree == 1:
-            endpoints.add(tile)
-    # Tiles with degree == 2 are neither junctions nor endpoints
-    
-    # Initialize set to keep track of visited edges
-    visited_edges = set()
-    
-    # Traverse fault lines starting from junctions and endpoints
-    for tile in junctions.union(endpoints):
-        neighbors = fault_adjacency[tile]
-        for neighbor in neighbors:
-            edge = frozenset({tile, neighbor})
-            if edge not in visited_edges:
-                fault_line = [tile]
-                visited_edges.add(edge)
-                previous_tile = tile
-                current_tile = neighbor
-                while True:
-                    fault_line.append(current_tile)
-                    visited_edges.add(frozenset({previous_tile, current_tile}))
-                    next_neighbors = fault_adjacency[current_tile]
-                    # Exclude previous tile
-                    next_neighbors = [n for n in next_neighbors if n != previous_tile]
-                    # Get unvisited neighbors
-                    unvisited_neighbors = [n for n in next_neighbors if frozenset({current_tile, n}) not in visited_edges]
-                    if (current_tile in junctions.union(endpoints)) and current_tile != tile:
-                        # Reached another junction or endpoint
+        fault_neighbors = [
+            neighbor for neighbor in tile.get_neighbors()
+            if neighbor.get_plate_index() is None
+        ]
+        if len(fault_neighbors) > 2:
+            fault_junction_tiles.add(tile)
+
+    assigned_tiles = set()
+    faults = []
+
+    # Process fault junction tiles
+    for tile in fault_junction_tiles:
+        if tile in assigned_tiles:
+            continue
+
+        # Start a new fault line
+        fault_line = set()
+        queue = deque()
+        queue.append((tile, None))  # No parent yet
+        assigned_tiles.add(tile)
+        fault_line.add(tile)
+
+        while queue:
+            current_tile, parent_had_two_or_less = queue.popleft()
+
+            current_fault_neighbors = [
+                neighbor for neighbor in current_tile.get_neighbors()
+                if neighbor.get_plate_index() is None
+            ]
+            num_current_fault_neighbors = len(current_fault_neighbors)
+
+            # Exception: If this is the first tile in the fault, force it to add one of its neighbors
+            if len(fault_line) == 1 and num_current_fault_neighbors > 2:
+                # Add one of its neighbors to ensure it doesn't become isolated
+                for neighbor in current_fault_neighbors:
+                    if neighbor not in assigned_tiles:
+                        queue.append((neighbor, True))  # Set parent_had_two_or_less to True
+                        assigned_tiles.add(neighbor)
+                        fault_line.add(neighbor)
                         break
-                    if unvisited_neighbors:
-                        # Continue to next tile
-                        next_tile = unvisited_neighbors[0]
-                        visited_edges.add(frozenset({current_tile, next_tile}))
-                        previous_tile = current_tile
-                        current_tile = next_tile
-                    else:
-                        # No unvisited neighbors, end of fault line
-                        break
-                faults.append(fault_line)
-    
-    # Process any remaining unvisited edges (e.g., loops without junctions)
-    all_edges = set()
-    for tile, neighbors in fault_adjacency.items():
-        for neighbor in neighbors:
-            edge = frozenset({tile, neighbor})
-            all_edges.add(edge)
-    remaining_edges = all_edges - visited_edges
-    while remaining_edges:
-        edge = remaining_edges.pop()
-        tile, neighbor = list(edge)
-        fault_line = [tile]
-        visited_edges.add(edge)
-        previous_tile = tile
-        current_tile = neighbor
-        while True:
-            fault_line.append(current_tile)
-            visited_edges.add(frozenset({previous_tile, current_tile}))
-            # Get neighbors excluding previous tile
-            next_neighbors = fault_adjacency[current_tile]
-            next_neighbors = [n for n in next_neighbors if n != previous_tile]
-            # Get unvisited neighbors
-            unvisited_neighbors = [n for n in next_neighbors if frozenset({current_tile, n}) not in visited_edges]
-            if unvisited_neighbors:
-                next_tile = unvisited_neighbors[0]
-                visited_edges.add(frozenset({current_tile, next_tile}))
-                previous_tile = current_tile
-                current_tile = next_tile
-            else:
-                # No unvisited neighbors, end of fault line
-                break
+                continue  # Skip the usual termination check
+
+            # Check if current tile has >2 fault neighbors and none of its neighbors have >2 fault neighbors
+            any_neighbor_has_more_than_two = any(
+                len([
+                    n for n in neighbor.get_neighbors()
+                    if n.get_plate_index() is None
+                ]) > 2
+                for neighbor in current_fault_neighbors
+            )
+
+            # If current tile meets the condition, stop adding neighbors but keep the tile
+            if num_current_fault_neighbors > 2 and not any_neighbor_has_more_than_two:
+                continue  # Do not add neighbors to the queue
+
+            for neighbor in current_fault_neighbors:
+                if neighbor in assigned_tiles:
+                    continue
+
+                neighbor_fault_neighbors = [
+                    n for n in neighbor.get_neighbors()
+                    if n.get_plate_index() is None
+                ]
+                num_neighbor_fault_neighbors = len(neighbor_fault_neighbors)
+
+                # Decide whether to add neighbor based on the criteria
+                if (num_neighbor_fault_neighbors <= 2 or
+                    (parent_had_two_or_less is not None and parent_had_two_or_less)):
+                    queue.append((neighbor, num_neighbor_fault_neighbors <= 2))
+                    assigned_tiles.add(neighbor)
+                    fault_line.add(neighbor)
+
+        # Add the completed fault line
         faults.append(fault_line)
-        remaining_edges = all_edges - visited_edges  # Update remaining_edges
+
+    # Process remaining unassigned fault tiles
+    for tile in fault_tiles:
+        if tile in assigned_tiles:
+            continue
+
+        fault_line = set()
+        queue = deque()
+        queue.append((tile, None))
+        assigned_tiles.add(tile)
+        fault_line.add(tile)
+
+        while queue:
+            current_tile, parent_had_two_or_less = queue.popleft()
+
+            current_fault_neighbors = [
+                neighbor for neighbor in current_tile.get_neighbors()
+                if neighbor.get_plate_index() is None
+            ]
+            num_current_fault_neighbors = len(current_fault_neighbors)
+
+            any_neighbor_has_more_than_two = any(
+                len([
+                    n for n in neighbor.get_neighbors()
+                    if n.get_plate_index() is None
+                ]) > 2
+                for neighbor in current_fault_neighbors
+            )
+
+            if num_current_fault_neighbors > 2 and not any_neighbor_has_more_than_two:
+                continue  # Do not add neighbors to the queue
+
+            for neighbor in current_fault_neighbors:
+                if neighbor in assigned_tiles:
+                    continue
+
+                neighbor_fault_neighbors = [
+                    n for n in neighbor.get_neighbors()
+                    if n.get_plate_index() is None
+                ]
+                num_neighbor_fault_neighbors = len(neighbor_fault_neighbors)
+
+                if (num_neighbor_fault_neighbors <= 2 or
+                    (parent_had_two_or_less is not None and parent_had_two_or_less)):
+                    queue.append((neighbor, num_neighbor_fault_neighbors <= 2))
+                    assigned_tiles.add(neighbor)
+                    fault_line.add(neighbor)
+
+        faults.append(fault_line)
+
+    # TODO - consider the edge case where a 4-way intersection can have a singular tile which will not be reached by the fault lines leading to it, and as such will be identified as a 1-tile fault.
+    # TODO - more meaningful, that also happens whenever we have a star junction (as opposed to a triangle junction)
+
+    # Step 5.1: Set fault indices on the tiles themselves
+    for i, fault in enumerate(faults):
+        for tile in fault:
+            tile.set_fault_index(i)
 
     return plates, faults
 

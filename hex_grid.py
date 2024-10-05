@@ -32,16 +32,16 @@ class HexTile:
         return self.col, self.row
         
     def set_plate_index(self, plate_index):
+        self.plate_index = plate_index
         if plate_index is not None:
-            self.plate_index = plate_index
             self.set_fault_index(None) # ensure it's not a fault
 
     def get_plate_index(self):
         return self.plate_index
 
     def set_fault_index(self, fault_index):
+        self.fault_index = fault_index
         if fault_index is not None:
-            self.fault_index = fault_index
             self.set_plate_index(None) # ensure it's not a plate
 
     def get_fault_index(self):

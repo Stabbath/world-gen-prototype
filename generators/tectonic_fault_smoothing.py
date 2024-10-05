@@ -10,7 +10,7 @@ def smooth_faults(fault_tiles, plate_to_cells):
     # Then we convert the rest to faults and re-smooth to readd them back into the plates.
     # This can be modified later to create new distinct plates instead, as a config option.
     for plate_index, cells in plate_to_cells.items():
-        if plate_index == -1:
+        if plate_index is None:
             continue  # Skip fault tiles
     
         # Find connected clusters using BFS
@@ -40,7 +40,7 @@ def smooth_faults(fault_tiles, plate_to_cells):
             # Convert tiles in clusters after the first to faults
             for cluster in clusters[1:]:
                 for tile in cluster:
-                    tile.set_plate_index(-1)
+                    tile.set_plate_index(None)
                     fault_tiles.add(tile)
                     plate_to_cells[plate_index].remove(tile)
     
@@ -65,10 +65,10 @@ def _smooth_fault_tiles(fault_tiles, plate_to_cells):
             # Removing it would make them not be separated, so we keep it.
             continue
         elif len(neighbor_plate_indices) == 2:
-            if -1 in neighbor_plate_indices:
-                # Neighbors consist of exactly two plate indices: one is -1 (fault) and the other is a valid plate.
+            if None in neighbor_plate_indices:
+                # Neighbors consist of exactly two plate indices: one is None (fault) and the other is a valid plate.
                 # Reassign this tile to the valid plate
-                other_plate = next(p for p in neighbor_plate_indices if p != -1)
+                other_plate = next(p for p in neighbor_plate_indices if p is not None)
                 tile.set_plate_index(other_plate)
                 fault_tiles.remove(tile)
                 plate_to_cells[other_plate].add(tile)
@@ -77,13 +77,13 @@ def _smooth_fault_tiles(fault_tiles, plate_to_cells):
                 pass
         elif len(neighbor_plate_indices) == 1:
             single_plate = next(iter(neighbor_plate_indices))
-            if single_plate != -1:
-                # Neighbors consist of only one plate index (not -1); reassign the tile to this plate
+            if single_plate is not None:
+                # Neighbors consist of only one plate index (not None); reassign the tile to this plate
                 tile.set_plate_index(single_plate)
                 fault_tiles.remove(tile)
                 plate_to_cells[single_plate].add(tile)
             else:
-                # All neighbors are faults (-1)
+                # All neighbors are faults (= None)
                 # Leave it alone for now, but note that it could be a micro-plate
                 pass
         else:
