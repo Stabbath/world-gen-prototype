@@ -145,12 +145,9 @@ def main():
                             GEN_METHOD,
                             cols=INITIAL_GRID_COLS,
                             rows=INITIAL_GRID_ROWS,
-                            size=HEX_SIZE,
-                            offset_x=100,
-                            offset_y=100,
                             n_selected=INITIAL_N_SELECTED_TILES
                         )
-                        hex_view = HexView(hex_grid)
+                        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
 
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
