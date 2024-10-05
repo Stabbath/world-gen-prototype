@@ -43,6 +43,8 @@ def generate_world_faults(hex_grid, n_selected=12, func_neighbors=get_neighbors_
     # Label continents
     label_continents(hex_grid)
     print("Continents labeled.")
+    
+    return hex_grid
 
 def select_distributed_boundary_tiles(hex_grid, n):
     # Get boundary tiles for each side

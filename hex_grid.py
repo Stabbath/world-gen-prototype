@@ -54,7 +54,7 @@ class HexGrid:
         return self.tiles
     
     def get_tile(self, col, row):
-        if 0 <= col < self.cols and 0 <= row < self.rows:
+        if 0 <= col < self.width and 0 <= row < self.height:
             return self.tiles[col + row * self.width]
         else:
             return None

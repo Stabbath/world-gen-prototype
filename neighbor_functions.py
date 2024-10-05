@@ -68,9 +68,12 @@ def get_neighbors_wraparound(col, row, cols, rows, axis=1):
         neighbor_col = col + dc
         if axis & 1:
             neighbor_col = neighbor_col % cols # Wrap around columns
+
         neighbor_row = row + dr
         if axis & 2:
             neighbor_row = neighbor_row % rows # Wrap around rows
-        neighbors.append((neighbor_col, neighbor_row))
+
+        if 0 <= neighbor_col < cols and 0 <= neighbor_row < rows: # If we're not wrapping around both axes, this needs to be checked
+            neighbors.append((neighbor_col, neighbor_row))
 
     return neighbors

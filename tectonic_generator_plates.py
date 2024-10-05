@@ -12,6 +12,28 @@ def randpop(l):
     del l[rand_index]
     return value
 
+PLATE_COLORS = [
+    (255, 0, 0),       # Red - 1
+    (0, 255, 0),       # Green
+    (0, 0, 255),       # Blue
+    (255, 255, 0),     # Yellow
+    (255, 0, 255),     # Magenta
+    (0, 255, 255),     # Cyan
+    (128, 0, 0),       # ?
+    (0, 128, 0),       # Dark Green
+    (0, 0, 128),       # Navy
+    (128, 128, 0),     # Olive - 10
+    (128, 0, 128),     # Purple
+    (0, 128, 128),     # ?
+    (255, 165, 0),     # Orange
+    (255, 0, 165),     # ?
+    (165, 255, 0),     # ?
+    (0, 255, 165),     # ?
+    (165, 0, 255),     # ?
+    (0, 165, 255),     # ?
+    (255, 192, 203),   # Pink- 19
+]
+
 # TODO - move these variables into the external configurations
 popfunc = randpop
 individual_spread = False
@@ -19,6 +41,7 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wraparound):
     grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
+    grid.plate_colors = PLATE_COLORS;
     
     # NOTE - if we need optimization later, detection should be made a part of the plate_method (or fault_method)
     # plates, faults = detect_plates_and_faults(grid)

@@ -2,11 +2,11 @@ import math
 import pygame
 import sys
 import traceback
-import random
 from camera import Camera
-from hex_board_generator import HexGrid
-from hexview import HexView
+from hex_grid import HexGrid
+from hex_view import HexView
 from map_generator import generate_map
+from neighbor_functions import get_neighbors_wraparound
 
 # ------------------------------
 # Constants and Configurations
@@ -96,21 +96,16 @@ def main():
         pan_start_pos = pygame.math.Vector2(0, 0)
         pan_start_offset = pygame.math.Vector2(0, 0)
 
-        # Create the hex grid
-        hex_grid = HexGrid(cols=INITIAL_GRID_COLS, rows=INITIAL_GRID_ROWS, size=HEX_SIZE, offset_x=100, offset_y=100)
-
         # Initial map generation
         hex_grid = generate_map(
             GEN_METHOD,
             cols=INITIAL_GRID_COLS,
             rows=INITIAL_GRID_ROWS,
-            size=HEX_SIZE,
-            offset_x=100,
-            offset_y=100,
-            n_selected=INITIAL_N_SELECTED_TILES
+            n_selected=INITIAL_N_SELECTED_TILES,
+            func_neighbors=get_neighbors_wraparound
         )
 
-        hex_view = HexView(hex_grid)
+        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
 
         # Main loop flag
         running = True

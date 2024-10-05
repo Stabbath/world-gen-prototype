@@ -4,10 +4,11 @@ import pygame
 class HexViewTile:
     is_selected = False
     
-    def __init__(self, tile, center, size):
+    def __init__(self, tile, center, size, gridview):
         self.tile = tile
         self.center = pygame.math.Vector2(center)
         self.size = size
+        self.gridview = gridview
 
     def get_corners(self):
         corners = []
@@ -26,11 +27,11 @@ class HexViewTile:
             outline_color = color_dict['line_outline']
             label_color = color_dict['line_label']
         elif self.tile.continent_label is not None:
-            fill_color = self.grid.continent_colors[self.continent_label]
+            fill_color = self.gridview.grid.continent_colors[self.tile.continent_label]
             outline_color = color_dict['default_outline']
             label_color = color_dict['default_label']
         elif self.tile.plate_index is not None:
-            fill_color = self.grid.plate_colors[self.plate_index]
+            fill_color = self.gridview.grid.plate_colors[self.tile.plate_index]
             outline_color = color_dict['default_outline']
             label_color = color_dict['default_label']
         else:
@@ -48,11 +49,11 @@ class HexViewTile:
         pygame.draw.polygon(screen, outline_color, screen_corners, 2)
     
         # Prepare label
-        label = f"({self.col},{self.row})"
-        if self.continent_label is not None:
-            label += f" {self.continent_label}"
-        elif self.plate_index is not None:
-            label += f" P{self.plate_index}"
+        label = f"({self.tile.col},{self.tile.row})"
+        if self.tile.continent_label is not None:
+            label += f" {self.tile.continent_label}"
+        elif self.tile.plate_index is not None:
+            label += f" P{self.tile.plate_index}"
     
         # Font size for labels scales with zoom
         adjusted_font_size = max(int(font_dict['base_size'] * camera.zoom), 8)
@@ -67,8 +68,10 @@ class HexViewTile:
 
 class HexView:
     def __init__(self, hexgrid, size, offset_x=100, offset_y=100):
-        offset_x = offset_x
-        offset_y = offset_y
+        self.grid = hexgrid
+        self.offset_x = offset_x
+        self.offset_y = offset_y
+        self.size = size
         HEX_HEIGHT = math.sqrt(3) * self.size
         HEX_WIDTH = 2 * self.size
         VERTICAL_SPACING = HEX_HEIGHT
@@ -82,7 +85,8 @@ class HexView:
                     (self.offset_y + tile.row * VERTICAL_SPACING) 
                     - (VERTICAL_SPACING / 2 if tile.col % 2 == 0 else 0)
                 ),
-                size
+                size,
+                self
             )
             for tile in hexgrid.tiles
         ]
