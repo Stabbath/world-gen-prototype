@@ -10,7 +10,7 @@ INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
 def generate_map(gen_method=0, cols=50, rows=50, n_selected=12, func_neighbors=get_neighbors_wraparound):
     hex_grid = HexGrid(width=cols, height=rows, func_neighbors=func_neighbors)
     if gen_method == 0:
-        hex_grid = generate_world_faults(hex_grid, n_selected=INITIAL_N_SELECTED_TILES, func_neighbors=func_neighbors)
+        hex_grid = generate_world_faults(hex_grid, n_selected=INITIAL_N_SELECTED_TILES)
         print("Generated world using fault-based method.")
     else:
         hex_grid = generate_world_plates(hex_grid, plate_count=12, func_neighbors=func_neighbors)

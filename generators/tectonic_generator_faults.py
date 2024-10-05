@@ -1,5 +1,4 @@
 import random
-from neighbor_functions import get_neighbors_wraparound
 
 # Constants used in the generation methods
 DIRECTIONS = ['N', 'NE', 'SE', 'S', 'SW', 'NW']
@@ -31,13 +30,13 @@ BRANCHING_CHANCE = 0.1
 MAX_BRANCH_DEPTH = 2
 STOP_ON_INTERSECTION = True  # As in original code
 
-def generate_world_faults(hex_grid, n_selected=12, func_neighbors=get_neighbors_wraparound):
+def generate_world_faults(hex_grid, n_selected=12):
     # Select boundary tiles
     selected_tiles = select_distributed_boundary_tiles(hex_grid, n_selected)
     print(f"Selected {n_selected} boundary tiles for line generation.")
 
     # Generate lines
-    generate_lines_in_directions(hex_grid, selected_tiles, func_neighbors)
+    generate_lines_in_directions(hex_grid, selected_tiles)
     print("Generated lines from boundary tiles.")
 
     # Label continents
@@ -49,9 +48,9 @@ def generate_world_faults(hex_grid, n_selected=12, func_neighbors=get_neighbors_
 def select_distributed_boundary_tiles(hex_grid, n):
     # Get boundary tiles for each side
     top_tiles = [tile for tile in hex_grid.tiles if tile.row == 0]
-    bottom_tiles = [tile for tile in hex_grid.tiles if tile.row == hex_grid.rows - 1]
+    bottom_tiles = [tile for tile in hex_grid.tiles if tile.row == hex_grid.height - 1]
     left_tiles = [tile for tile in hex_grid.tiles if tile.col == 0]
-    right_tiles = [tile for tile in hex_grid.tiles if tile.col == hex_grid.cols - 1]
+    right_tiles = [tile for tile in hex_grid.tiles if tile.col == hex_grid.width - 1]
 
     sides = ['top', 'right', 'bottom', 'left']
     side_tiles = {
@@ -93,13 +92,13 @@ def get_weighted_initial_directions(hex_grid, tile):
     if tile.row == 0 and tile.col == 0:
         # Top-left corner
         direction_weights['SE'] = 1
-    elif tile.row == 0 and tile.col == hex_grid.cols - 1:
+    elif tile.row == 0 and tile.col == hex_grid.width - 1:
         # Top-right corner
         direction_weights['SW'] = 1
-    elif tile.row == hex_grid.rows - 1 and tile.col == 0:
+    elif tile.row == hex_grid.height - 1 and tile.col == 0:
         # Bottom-left corner
         direction_weights['NE'] = 1
-    elif tile.row == hex_grid.rows - 1 and tile.col == hex_grid.cols - 1:
+    elif tile.row == hex_grid.height - 1 and tile.col == hex_grid.width - 1:
         # Bottom-right corner
         direction_weights['NW'] = 1
     else:
@@ -109,7 +108,7 @@ def get_weighted_initial_directions(hex_grid, tile):
             direction_weights['S'] = 0.7
             direction_weights['SE'] = 0.15
             direction_weights['SW'] = 0.15
-        if tile.row == hex_grid.rows - 1:
+        if tile.row == hex_grid.height - 1:
             # Bottom edge
             direction_weights['N'] = 0.7
             direction_weights['NE'] = 0.15
@@ -118,7 +117,7 @@ def get_weighted_initial_directions(hex_grid, tile):
             # Left edge
             direction_weights['NE'] = 0.5
             direction_weights['SE'] = 0.5
-        if tile.col == hex_grid.cols - 1:
+        if tile.col == hex_grid.width - 1:
             # Right edge
             direction_weights['NW'] = 0.5
             direction_weights['SW'] = 0.5
@@ -136,7 +135,7 @@ def get_weighted_initial_directions(hex_grid, tile):
     weighted_directions = list(direction_weights.items())
     return weighted_directions
 
-def generate_lines_in_directions(hex_grid, selected_tiles, func_neighbors):
+def generate_lines_in_directions(hex_grid, selected_tiles):
     for tile in selected_tiles:
         # Get weighted possible initial directions based on tile position
         weighted_directions = get_weighted_initial_directions(hex_grid, tile)
@@ -145,11 +144,11 @@ def generate_lines_in_directions(hex_grid, selected_tiles, func_neighbors):
             directions, weights = zip(*weighted_directions)
             initial_direction = random.choices(directions, weights=weights)[0]
             print(f"Generating line from Tile ({tile.col}, {tile.row}) towards {initial_direction}")
-            generate_line(hex_grid, tile, initial_direction, initial_direction, MAX_BRANCH_DEPTH, func_neighbors)
+            generate_line(hex_grid, tile, initial_direction, initial_direction, MAX_BRANCH_DEPTH)
         else:
             print(f"No possible initial directions for Tile ({tile.col}, {tile.row})")
 
-def generate_line(hex_grid, start_tile, direction, initial_direction, branch_depth, func_neighbors):
+def generate_line(hex_grid, start_tile, direction, initial_direction, branch_depth):
     """
     Generate a line from the start_tile, moving randomly without sharp turns,
     preferring to continue towards the initial direction. Allows for branching.
@@ -164,7 +163,7 @@ def generate_line(hex_grid, start_tile, direction, initial_direction, branch_dep
     current_direction = direction
     visited_tiles = set()
     while True:
-        next_tile = func_neighbors(hex_grid, current_tile, current_direction)
+        next_tile = get_neighbor_in_direction(hex_grid, current_tile, current_direction)
         if next_tile:
             if next_tile.is_selected:
                 # Allow lines to pass through selected tiles
@@ -211,6 +210,42 @@ def generate_line(hex_grid, start_tile, direction, initial_direction, branch_dep
             print(f"Line reached boundary at Tile ({current_tile.col}, {current_tile.row})")
             break
 
+def get_neighbor_in_direction(hex_grid, tile, direction):
+    """
+    Get the neighboring tile in the specified direction.
+
+    :param hex_grid: The HexGrid object
+    :param tile: Current HexTile object
+    :param direction: Direction string ('N', 'NE', 'SE', 'S', 'SW', 'NW')
+    :return: Neighbor HexTile object or None if out of bounds
+    """
+    parity = 'even' if tile.col % 2 == 0 else 'odd'
+    NEIGHBOR_DELTAS = {
+        'even': {
+            'N': (0, -1),
+            'NE': (+1, -1),
+            'SE': (+1, 0),
+            'S': (0, +1),
+            'SW': (-1, 0),
+            'NW': (-1, -1)
+        },
+        'odd': {
+            'N': (0, -1),
+            'NE': (+1, 0),
+            'SE': (+1, +1),
+            'S': (0, +1),
+            'SW': (-1, +1),
+            'NW': (-1, 0)
+        }
+    }
+    delta = NEIGHBOR_DELTAS[parity].get(direction)
+    if not delta:
+        return None
+    neighbor_col = tile.col + delta[0]
+    neighbor_row = tile.row + delta[1]
+    neighbor = hex_grid.get_tile(neighbor_col, neighbor_row)
+    return neighbor
+
 def angular_difference(angle1, angle2):
     """
     Calculate the smallest angular difference between two angles in degrees.
@@ -256,7 +291,7 @@ def flood_fill(start_tile, label):
         if tile.continent_label is None and not tile.is_line:
             tile.continent_label = label
             # Get neighbors without wraparound
-            for neighbor in tile.get_neighbors(wraparound=False):
+            for neighbor in tile.get_neighbors():
                 if neighbor and not neighbor.is_line and neighbor.continent_label is None:
                     stack.append(neighbor)
 

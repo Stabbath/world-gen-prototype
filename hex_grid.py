@@ -9,7 +9,8 @@ class HexTile:
         self.is_line = False
         self.plate_index = None
         self.continent_label = None
-        # TODO - review continent label and is_line
+        self.is_selected = False
+        # TODO - review continent label and is_line; also is_selected. Things that are just used during gen should probably be kept in an external dictionary/array rather than on the tile
 
     def get_coords(self):
         return self.col, self.row
