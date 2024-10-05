@@ -48,22 +48,22 @@ class HexViewTile:
         # Draw hexagon outline
         pygame.draw.polygon(screen, outline_color, screen_corners, 2)
     
-        # Prepare label
-        label = f"({self.tile.col},{self.tile.row})"
-        if self.tile.continent_label is not None:
-            label += f" {self.tile.continent_label}"
-        elif self.tile.plate_index is not None:
-            label += f" P{self.tile.plate_index}"
+        # # Prepare label
+        # label = f"({self.tile.col},{self.tile.row})"
+        # if self.tile.continent_label is not None:
+        #     label += f" {self.tile.continent_label}"
+        # elif self.tile.plate_index is not None:
+        #     label += f" P{self.tile.plate_index}"
     
-        # Font size for labels scales with zoom
-        adjusted_font_size = max(int(font_dict['base_size'] * camera.zoom), 8)
-        try:
-            adjusted_font = pygame.font.SysFont(font_dict['base_name'], adjusted_font_size)
-        except:
-            adjusted_font = pygame.font.Font(None, adjusted_font_size)
-        text_surface = adjusted_font.render(label, True, label_color)
-        text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
-        screen.blit(text_surface, text_rect)
+        # # Font size for labels scales with zoom
+        # adjusted_font_size = max(int(font_dict['base_size'] * camera.zoom), 8)
+        # try:
+        #     adjusted_font = pygame.font.SysFont(font_dict['base_name'], adjusted_font_size)
+        # except:
+        #     adjusted_font = pygame.font.Font(None, adjusted_font_size)
+        # text_surface = adjusted_font.render(label, True, label_color)
+        # text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
+        # screen.blit(text_surface, text_rect)
         
 
 class HexView:
