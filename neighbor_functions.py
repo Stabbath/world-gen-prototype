@@ -21,7 +21,7 @@ def get_neighbors(col, row, cols, rows):
         rows (int): Total number of rows in the grid.
 
     Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells within bounds.
+        List[Tuple[int, int]]: A list of (col, row) tuples with the coordinates of neighboring cells within bounds.
     """
     neighbors = []
 
@@ -42,35 +42,38 @@ def get_neighbors(col, row, cols, rows):
 
     return neighbors
 
-def get_neighbors_wraparound(col, row, cols, rows):
+def get_neighbors_wraparound(col, row, cols, rows, axis=1):
     """
     Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
-    with horizontal wraparound.
+    with wraparound.
 
     Parameters:
         col (int): The column index of the current cell.
         row (int): The row index of the current cell.
         cols (int): Total number of columns in the grid.
         rows (int): Total number of rows in the grid.
+        axis (int): Flags for axes to wrap around. 1 = horizontal, 2 = vertical
 
     Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells with horizontal wraparound.
+        List[Tuple[int, int]]: A list of (col, row) tuples with the coordinates of neighboring cells with wraparound.
     """
     neighbors = []
 
-    # Determine if the column is even or odd
     if col % 2 == 0:
         deltas = EVEN_Q_NEIGHBORS
     else:
         deltas = ODD_Q_NEIGHBORS
 
-    # Calculate neighbor positions with wraparound for rows
     for dc, dr in deltas:
         neighbor_col = col + dc
-        neighbor_row = (row + dr) % rows  # Wrap around rows vertically
+        if axis & 1:
+            neighbor_col = neighbor_col % cols # Wrap around columns
 
-        # Check if the neighbor column is within bounds (no wraparound horizontally)
-        if 0 <= neighbor_col < cols:
+        neighbor_row = row + dr
+        if axis & 2:
+            neighbor_row = neighbor_row % rows # Wrap around rows
+
+        if 0 <= neighbor_col < cols and 0 <= neighbor_row < rows: # If we're not wrapping around both axes, this needs to be checked
             neighbors.append((neighbor_col, neighbor_row))
 
     return neighbors

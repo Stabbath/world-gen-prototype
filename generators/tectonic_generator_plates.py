@@ -11,19 +11,42 @@ def randpop(l):
     value = l[rand_index]
     del l[rand_index]
     return value
-    
-neighbors_func = get_neighbors_wraparound  # or get_neighbors
+
+PLATE_COLORS = [
+    (255, 0, 0),       # Red - 1
+    (0, 255, 0),       # Green
+    (0, 0, 255),       # Blue
+    (255, 255, 0),     # Yellow
+    (255, 0, 255),     # Magenta
+    (0, 255, 255),     # Cyan
+    (128, 0, 0),       # ?
+    (0, 128, 0),       # Dark Green
+    (0, 0, 128),       # Navy
+    (128, 128, 0),     # Olive - 10
+    (128, 0, 128),     # Purple
+    (0, 128, 128),     # ?
+    (255, 165, 0),     # Orange
+    (255, 0, 165),     # ?
+    (165, 255, 0),     # ?
+    (0, 255, 165),     # ?
+    (165, 0, 255),     # ?
+    (0, 165, 255),     # ?
+    (255, 192, 203),   # Pink- 19
+]
+
+# TODO - move these variables into the external configurations
 popfunc = randpop
 individual_spread = False
 growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
-def generate_world(grid):
-    grid = plate_method(grid, 12)  # TODO - gui's alternative would be here instead of plate_method
+def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wraparound):
+    grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
+    grid.plate_colors = PLATE_COLORS;
     
     # NOTE - if we need optimization later, detection should be made a part of the plate_method (or fault_method)
-    plates, faults = detect_plates_and_faults(grid)
-    grid.set_plates(plates)
-    grid.set_faults(faults)
+    # plates, faults = detect_plates_and_faults(grid)
+    # grid.set_plates(plates)
+    # grid.set_faults(faults)
     
     # TODO - fault line and plate properties
     # TODO - simulation of movements, creation of mountains, etc
@@ -113,7 +136,7 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
 
     return grid
 
-def plate_method(grid, plate_count):
+def plate_method(grid, plate_count, func_neighbors):
     # Initialize neighbors queues for each plate
     plate_queues = [ deque() for _ in range(plate_count) ]
 
@@ -129,7 +152,7 @@ def plate_method(grid, plate_count):
             if tile.get_plate_index() is None:
                 plate_queues[i].append(tile)
                 break  # Ensure unique initial seeds
-    return spread_generic(grid, plate_queues, neighbors_func, popfunc, individual_spread, growth_scales)
+    return spread_generic(grid, plate_queues, func_neighbors, popfunc, individual_spread, growth_scales)
         # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
         # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
         

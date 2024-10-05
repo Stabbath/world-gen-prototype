@@ -1,5 +1,4 @@
 from functools import total_ordering
-from neighbor_functions import get_neighbors_wraparound
 
 @total_ordering
 class HexTile:
@@ -7,7 +6,11 @@ class HexTile:
         self.col = col
         self.row = row
         self.grid = grid
+        self.is_line = False
         self.plate_index = None
+        self.continent_label = None
+        self.is_selected = False
+        # TODO - review continent label and is_line; also is_selected. Things that are just used during gen should probably be kept in an external dictionary/array rather than on the tile
 
     def get_coords(self):
         return self.col, self.row
@@ -20,7 +23,7 @@ class HexTile:
 
     def get_neighbors(self):
         neighbors = []
-        coord_tuples = get_neighbors_wraparound(self.col, self.row, self.grid.width, self.grid.height)
+        coord_tuples = self.grid.func_neighbors(self.col, self.row, self.grid.width, self.grid.height)
         for x, y in coord_tuples:
             neighbors.append(self.grid.get_tile(x, y))
         return neighbors
@@ -39,10 +42,11 @@ class HexTile:
         return hash((self.col, self.row))
 
 class HexGrid:
-    def __init__(self, width, height):
+    def __init__(self, width, height, func_neighbors):
         self.width = width
         self.height = height
         self.tiles = [None] * (width * height)
+        self.func_neighbors = func_neighbors
         for row in range(height):
             for col in range(width):
                 self.tiles[col + row * self.width] = HexTile(col, row, self)
@@ -51,7 +55,10 @@ class HexGrid:
         return self.tiles
     
     def get_tile(self, col, row):
-        return self.tiles[col + row * self.width]
+        if 0 <= col < self.width and 0 <= row < self.height:
+            return self.tiles[col + row * self.width]
+        else:
+            return None
     
     def set_tile(self, col, row, tile):
         self.tiles[col + row * self.width] = tile
