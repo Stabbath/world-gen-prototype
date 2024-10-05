@@ -20,6 +20,22 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 # TODO - add a config option once plate merging is implemented, as part of plate merging - boolean: start by merging all plates touching each pole and then exclude those plates from any more merges
 
+# TODO - add a config option to tectonic method: turn non-wraparound edges into faults with -1 GenFactor. To force oceans at the poles.
+
+# TODO - move this to utils
+def gaussian_in_range(mean=0, std_dev=0.7, min=-1, max=1):
+    counter = 0
+    while counter < 10: # to prevent eternal loops
+        value = random.gauss(mean, std_dev)
+        if min <= value <= max:
+            return value
+        else:
+            counter += 1
+    raise Exception("Bad parameters for gaussian_in_range; could not succeed after 10 tries")
+
+# Example usage
+random_value = gaussian_in_range()
+
 def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wraparound):
     grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
     
@@ -40,27 +56,35 @@ def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wra
     # For now, just assuming my initial method. Later, we'll need to possibly restructure/extract things to make it more flexible, with different combinations of Property Assignment and Altitude Map Generation
 
     # GENERATOR/CONSUMER MODEL
+    # These settings should come from the gen config later.
+    MAX_ITER = 100
+    MAXGENFACTOR = 1
+    MAXALTITUDE = 20000
+    NOISE_FACTOR = 0.02
+    SMOOTHEN_GENFACTORS = False
+
     # First, we assign to each fault a float between 1 and -1, completely at random. This is its Generation Factor. If negative, it means it consumes mass. If positive, it generates it.
     # We use a dictionary, external to the Fault class.
     generation_factors = {}
     for fault in grid.faults:
-        generation_factors[fault.id] = random.uniform(-1, 1)
-    print(generation_factors)
+        generation_factors[fault.id] = gaussian_in_range(min=-1, max=1)
 
     # Then we smooth these factors: we check for each fault its neighboring faults, and the Generation Factor we have for it,
     # and we recalculate them all as a weighted average of their own factor and their neighbors', with their own factor being worth twice as much for the average.
-    smoothed_generation_factors = {}
-    for fault in grid.faults:
-        own_factor = generation_factors[fault.id]
-        neighbor_indices = fault.get_fault_neighbor_indices()
-        neighbor_factors = [generation_factors[neighbor_index] for neighbor_index in neighbor_indices]
-        total_weight = 2 + len(neighbor_factors)
-        weighted_sum = 2 * own_factor + sum(neighbor_factors)
-        smoothed_factor = weighted_sum / total_weight
-        smoothed_generation_factors[fault.id] = smoothed_factor
-
+    if SMOOTHEN_GENFACTORS:
+        smoothed_generation_factors = {}
+        for fault in grid.faults:
+            own_factor = generation_factors[fault.id]
+            neighbor_indices = fault.get_fault_neighbor_indices()
+            neighbor_factors = [generation_factors[neighbor_index] for neighbor_index in neighbor_indices]
+            total_weight = 2 + len(neighbor_factors)
+            weighted_sum = 2 * own_factor + sum(neighbor_factors)
+            smoothed_factor = weighted_sum / total_weight
+            smoothed_generation_factors[fault.id] = smoothed_factor
+        generation_factors = smoothed_generation_factors
+    
     # Then, we renormalize everything so that the lowest is -1 and the highest is +1.
-    factor_values = smoothed_generation_factors.values()
+    factor_values = generation_factors.values()
     min_factor = min(factor_values)
     max_factor = max(factor_values)
 
@@ -69,12 +93,6 @@ def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wra
         generation_factors[fault_id] = normalized_factor
     
     # === Step 3: Altitude Map Generation ===
-    # These settings should come from the gen config later.
-    MAX_ITER = 100
-    MAXGENFACTOR = 1
-    MAXALTITUDE = 20000
-    NOISE_FACTOR = 0.02
-    
     # Each iteration has the following steps: 
     #   1. Each fault adds landmass to itself equal to its generation_factor times the MaxGenFactor
     #   2. We add a small amount of noise to the entire hex grid.

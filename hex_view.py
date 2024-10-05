@@ -80,7 +80,10 @@ def color_generator(index):
 
 # TODO - this function should be passed into the HexViewTile from outside. We pass a different function for the Altitude map, and a different one for Hydrological, etc
 def get_colors(viewTile):
-    return tuple(int(viewTile.tile.altitude * 255 // 20000) for _ in (1, 1, 1)) # TODO - this is currently hardcoded to a MAX_ALTITUDE of 20000, obviously temporary
+    if viewTile.tile.altitude <= 8000:
+        return (32, 98, 255), (32, 98, 255), (32, 98, 255)
+    temp_col_mult = 255
+    return tuple(int(viewTile.tile.altitude * temp_col_mult // 20000) for _ in (1, 1, 1)), tuple(int(viewTile.tile.altitude * temp_col_mult // 20000) for _ in (1, 1, 1)), tuple(int(viewTile.tile.altitude * temp_col_mult // 20000) for _ in (1, 1, 1)) # TODO - this is currently hardcoded to a MAX_ALTITUDE of 20000, obviously temporary
 
     if viewTile.tile.is_selected or viewTile.tile.is_line or viewTile.tile.fault_index is not None:
         fill_color = color_dict['line_hex']
