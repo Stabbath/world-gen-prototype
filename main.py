@@ -5,6 +5,7 @@ import traceback
 import random
 from camera import Camera
 from hex_board_generator import HexGrid
+from hexview import HexView
 from map_generator import generate_map
 
 # ------------------------------
@@ -98,18 +99,18 @@ def main():
         # Create the hex grid
         hex_grid = HexGrid(cols=INITIAL_GRID_COLS, rows=INITIAL_GRID_ROWS, size=HEX_SIZE, offset_x=100, offset_y=100)
 
-        
-
         # Initial map generation
         hex_grid = generate_map(
-        GEN_METHOD,
-        cols=INITIAL_GRID_COLS,
-        rows=INITIAL_GRID_ROWS,
-        size=HEX_SIZE,
-        offset_x=100,
-        offset_y=100,
-        n_selected=INITIAL_N_SELECTED_TILES
-    )
+            GEN_METHOD,
+            cols=INITIAL_GRID_COLS,
+            rows=INITIAL_GRID_ROWS,
+            size=HEX_SIZE,
+            offset_x=100,
+            offset_y=100,
+            n_selected=INITIAL_N_SELECTED_TILES
+        )
+
+        hex_view = HexView(hex_grid)
 
         # Main loop flag
         running = True
@@ -146,21 +147,22 @@ def main():
                     if event.key == pygame.K_r:
                         # Regenerate the map
                         hex_grid = generate_map(
-                        GEN_METHOD,
-                        cols=INITIAL_GRID_COLS,
-                        rows=INITIAL_GRID_ROWS,
-                        size=HEX_SIZE,
-                        offset_x=100,
-                        offset_y=100,
-                        n_selected=INITIAL_N_SELECTED_TILES
-                    )
+                            GEN_METHOD,
+                            cols=INITIAL_GRID_COLS,
+                            rows=INITIAL_GRID_ROWS,
+                            size=HEX_SIZE,
+                            offset_x=100,
+                            offset_y=100,
+                            n_selected=INITIAL_N_SELECTED_TILES
+                        )
+                        hex_view = HexView(hex_grid)
 
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
 
             # Draw the hex grid with labels
-            if hex_grid:
-                hex_grid.draw(screen, camera, color_dict, font_dict)
+            if hex_view:
+                hex_view.draw(screen, camera, color_dict, font_dict)
 
             # Update the display
             pygame.display.flip()

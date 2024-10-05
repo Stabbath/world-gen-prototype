@@ -21,7 +21,7 @@ def get_neighbors(col, row, cols, rows):
         rows (int): Total number of rows in the grid.
 
     Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells within bounds.
+        List[Tuple[int, int]]: A list of (col, row) tuples with the coordinates of neighboring cells within bounds.
     """
     neighbors = []
 
@@ -42,7 +42,7 @@ def get_neighbors(col, row, cols, rows):
 
     return neighbors
 
-def get_neighbors_wraparound(col, row, cols, rows):
+def get_neighbors_wraparound(col, row, cols, rows, axis=1):
     """
     Returns a list of neighboring cells' coordinates for a given cell in an even-q vertical offset grid,
     with wraparound.
@@ -52,9 +52,10 @@ def get_neighbors_wraparound(col, row, cols, rows):
         row (int): The row index of the current cell.
         cols (int): Total number of columns in the grid.
         rows (int): Total number of rows in the grid.
+        axis (int): Flags for axes to wrap around. 1 = horizontal, 2 = vertical
 
     Returns:
-        List[Tuple[int, int]]: A list of (col, row) tuples representing neighboring cells with wraparound.
+        List[Tuple[int, int]]: A list of (col, row) tuples with the coordinates of neighboring cells with wraparound.
     """
     neighbors = []
 
@@ -64,8 +65,12 @@ def get_neighbors_wraparound(col, row, cols, rows):
         deltas = ODD_Q_NEIGHBORS
 
     for dc, dr in deltas:
-        neighbor_col = (col + dc) % cols  # Wrap around columns
-        neighbor_row = (row + dr) % rows  # Wrap around rows
+        neighbor_col = col + dc
+        if axis & 1:
+            neighbor_col = neighbor_col % cols # Wrap around columns
+        neighbor_row = row + dr
+        if axis & 2:
+            neighbor_row = neighbor_row % rows # Wrap around rows
         neighbors.append((neighbor_col, neighbor_row))
 
     return neighbors
