@@ -1,9 +1,7 @@
 from functools import total_ordering
 
-# TODO - probably need an id for plates and faults. Simplest is probably to use uuid()
+# TODO Plate and Fault should be moved to a separate file, as the HexGrid should be independent from the Tectonic Method.
 class Plate:
-    tiles = []
-    
     def __init__(self, tiles):
         self.tiles = tiles
         
@@ -11,13 +9,38 @@ class Plate:
         self.tiles = tiles
     
 class Fault:
-    tiles = []
-    
-    def __init__(self, tiles):
+    def __init__(self, fault_index, tiles):
+        self.id = fault_index
+        self.fault_index = fault_index
         self.tiles = tiles
     
     def set_tiles(self, tiles):
         self.tiles = tiles
+
+    def get_tiles(self):
+        return self.tiles
+
+    def refresh_neighbor_groups(self):
+        faults = {}
+        plates = {}
+        for tile in self.tiles:
+            tile_neighbors = tile.get_neighbors()
+            
+            for tn in tile_neighbors:
+                tnFaultIdx = tn.get_fault_index()
+                if tnFaultIdx != self.fault_index:
+                    if tnFaultIdx is None:
+                        plates[tn.get_plate_index()] = True
+                    else:
+                        faults[tnFaultIdx] = True
+        self.fault_neighbor_indices = list(faults)
+        self.plate_neighbor_indices = list(plates)
+
+    def get_fault_neighbor_indices(self):
+        return self.fault_neighbor_indices
+        
+    def get_plate_neighbor_indices(self):
+        return self.plate_neighbor_indices
 
 @total_ordering
 class HexTile:
@@ -31,8 +54,15 @@ class HexTile:
         self.fault_index = None
         self.continent_label = None
         self.is_selected = False
+        self.altitude = 0
         # TODO - review continent label and is_line; also is_selected. Things that are just used during gen should probably be kept in an external dictionary/array rather than on the tile
         # TODO - same goes for plate index and fault index
+
+    def get_altitude(self):
+        return self.altitude
+
+    def set_altitude(self, altitude):
+        self.altitude = altitude        
 
     def get_coords(self):
         return self.col, self.row
@@ -103,4 +133,4 @@ class HexGrid:
     def set_faults_from_lists(self, faults):
         self.faults = []
         for fault in faults:
-            self.faults.append(Fault(fault));
+            self.faults.append(Fault(fault[0].get_fault_index(), fault)); # TODO - kind of hacky, clean it up later
