@@ -1,6 +1,47 @@
 import math
 import pygame
 
+def color_generator(index):
+    # Total combinations: 6x7 = 42. Change this if the multipliers array is changed
+    if index >= 30:
+        return (255, 255, 255) # return White if out of bounds
+        
+    matrices = [
+        [(1,0,0),(0,0,0)],
+        [(0,1,0),(0,0,0)],
+        [(0,0,1),(0,0,0)],
+        [(1,0,0),(0,1,0)],
+        [(1,0,0),(0,0,1)],
+        [(0,1,0),(0,0,1)]
+    ]
+    
+    multipliers = [
+        (255, 255),
+        (128, 128),
+        (255, 165),
+        (165, 255),
+        (192, 96),
+        (96, 192),
+        (128, 128)
+    ]
+
+    # Calculate sub-indices directly from the provided index
+    matrix_index = index % len(matrices)
+    index = index // len(matrices)
+
+    multipliers_index = index
+
+    matrix = matrices[matrix_index]
+    multipliers = multipliers[multipliers_index]
+    
+    # Compute the color using the selected matrices and multipliers
+    color = [
+        matrix[0][i] * multipliers[0] + matrix[1][i] * multipliers[1]
+        for i in range(3)
+    ]
+    
+    return color
+
 class HexViewTile:
     is_selected = False
     
@@ -27,11 +68,11 @@ class HexViewTile:
             outline_color = color_dict['line_outline']
             label_color = color_dict['line_label']
         elif self.tile.continent_label is not None:
-            fill_color = self.gridview.grid.continent_colors[self.tile.continent_label]
+            fill_color = self.gridview.grid.continent_colors[self.tile.continent_label] # TODO - should just one color array/fetch function. Check with Gui what his goal with this specific colour scheme was.
             outline_color = color_dict['default_outline']
             label_color = color_dict['default_label']
         elif self.tile.plate_index is not None:
-            fill_color = self.gridview.grid.plate_colors[self.tile.plate_index]
+            fill_color = color_generator(self.tile.plate_index)
             outline_color = color_dict['default_outline']
             label_color = color_dict['default_label']
         else:

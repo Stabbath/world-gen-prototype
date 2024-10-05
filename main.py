@@ -69,7 +69,7 @@ MAX_ZOOM = 3.0    # Maximum zoom level
 INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
 
 # Generation method
-GEN_METHOD = 0  # Set to 0 for fault-based generation, 1 for plate-based generation
+GEN_METHOD = 1  # Set to 0 for fault-based generation, 1 for plate-based generation
 
 # ------------------------------
 # Pygame Initialization and Main Loop
