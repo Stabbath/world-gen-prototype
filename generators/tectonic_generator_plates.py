@@ -3,6 +3,7 @@ import random
 from collections import deque, defaultdict
 from neighbor_functions import get_neighbors_wraparound
 from generators.tectonic_fault_smoothing import smooth_faults
+from utils import gaussian_in_range
 
 def leftpop(l):
     return l.popleft()
@@ -24,21 +25,10 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 # TODO - add a config option to tectonic method: plate properties: continental or oceanic. A continental plate gets an initial boost to its altitude to every tile. An oceanic one gets a symmetric decrease.
 # ^ note i already have a similar concept written down somewhere else
 
-# TODO - move this to utils
-def gaussian_in_range(mean=0, std_dev=0.7, min=-1, max=1):
-    counter = 0
-    while counter < 10: # to prevent eternal loops
-        value = random.gauss(mean, std_dev)
-        if min <= value <= max:
-            return value
-        else:
-            counter += 1
-    raise Exception("Bad parameters for gaussian_in_range; could not succeed after 10 tries")
 
-# Example usage
-random_value = gaussian_in_range()
-
-def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wraparound):
+def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound):
+    plate_count = config['startpoint_count']
+    MAXALTITUDE = config['max_altitude']
     grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
     
     # === Step 1: Generation of Plates and Faults === 
@@ -59,11 +49,11 @@ def generate_world_plates(grid, plate_count=12, func_neighbors=get_neighbors_wra
 
     # GENERATOR/CONSUMER MODEL
     # These settings should come from the gen config later.
-    MAX_ITER = 100
-    MAXGENFACTOR = 1
-    MAXALTITUDE = 20000
-    NOISE_FACTOR = 0.02
-    SMOOTHEN_GENFACTORS = False
+    
+    MAX_ITER = config['generator_consumer']['max_iter']
+    MAXGENFACTOR = config['generator_consumer']['max_genfactor']
+    NOISE_FACTOR = config['generator_consumer']['noise_factor']
+    SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
 
     # First, we assign to each fault a float between 1 and -1, completely at random. This is its Generation Factor. If negative, it means it consumes mass. If positive, it generates it.
     # We use a dictionary, external to the Fault class.
@@ -312,9 +302,6 @@ def detect_plates_and_faults(grid):
 
         faults.append(list(fault_line))
 
-    # TODO - consider the edge case where a 4-way intersection can have a singular tile which will not be reached by the fault lines leading to it, and as such will be identified as a 1-tile fault.
-    # TODO - more meaningful, that also happens whenever we have a star junction (as opposed to a triangle junction)
-
     # Step 5.1: Set fault indices on the tiles themselves
     for i, fault in enumerate(faults):
         for tile in fault:
@@ -388,13 +375,3 @@ def plate_method(grid, plate_count, func_neighbors):
         # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
         # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
         
-        
-    # TODO - detect all fault lines, assign a fault type to each one
-    # TODO - simulate the movements of our plates for a while and deform them appropriately on a 2D plane still
-    # TODO - then level it up to a 3D plane, so we can add subduction etc and make tectonic mountains and pits
-    # TODO - then add hot spots, volcanoes, and any other such extras. Maybe meteor craters too.
-    #   And that will conclude our Topology. It could however be developed further by for example defining oceanic vs continental plates, or rock composition (and density), or plate age.
-    #   - Step 2 would then be seas, oceans, rivers, lakes. Probably in conjunction with climate. For now, assume sea level is universally the same, ignore tides and tide differences between seas and stuff.
-    #   - Step 3 would be climate, if not already done. But I think that goes hand in hand with 2.
-    #   - Step 4 would then be erosion, finetuning topology based on the effect of climate.
-    #   And that would conclude our Geology. I think. Afterwards, we can tackle civilizational simulation.

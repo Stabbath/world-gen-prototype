@@ -7,7 +7,8 @@ from hex_view import HexView
 from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
-from config import default_config, ConfigPanel
+from config import default_config, default_config_plates
+from config_panel import ConfigPanel
 from view_tabs import TabPanel
 
 # ------------------------------
@@ -59,10 +60,7 @@ def gen_views(config, hex_grid):
 
 def gen_world(config):
     hex_grid = generate_map(
-        gen_method=config["gen_method"],
-        cols=config["width"],
-        rows=config["height"],
-        n_selected=config["startpoint_count"],
+        config,
         func_neighbors=get_neighbors_wraparound
     )
     return hex_grid
@@ -93,7 +91,7 @@ def main():
         pan_start_pos = pygame.math.Vector2(0, 0)
         pan_start_offset = pygame.math.Vector2(0, 0)
 
-        config = default_config()
+        config = default_config_plates() # TODO - temp, but plates config has nothing that would tamper with faults method, right now anyway
 
         # Initial map generation
         hex_grid, hex_views = full_gen(config)
