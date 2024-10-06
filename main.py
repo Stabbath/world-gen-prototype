@@ -116,6 +116,8 @@ def main():
                 if event.type == pygame.QUIT:
                     running = False
 
+                # TODO - refactor event detection so we can just have each component (including an eventual WorldView component which should be extracted from here) have a process_event thrown at it, and we just throw it at each of them in order to see which ones do something
+
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     # First, check if the click is on any tab button
                     tab_clicked = tab_panel.process_event(event)
