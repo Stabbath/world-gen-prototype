@@ -4,7 +4,7 @@ RED    = (255,0,0)
 YELLOW = (255,255,0)
 
 # Colors (default values)
-DEFAULT_HEX_COLOR = (173, 216, 230)               # Light blue (ocean)
+DEFAULT_HEX_COLOR = (173, 216, 230) # Light blue (ocean)
 DEFAULT_OUTLINE_COLOR = BLACK
 LABEL_COLOR = BLACK
 LINE_HEX_COLOR = BLACK
@@ -20,7 +20,7 @@ color_dict = {
     'line_label':  LINE_LABEL_COLOR
 }
 
-def color_plates(viewTile, configs):
+def color_plates(viewTile, config):
     if viewTile.tile.plate_index is not None:
         color = color_generator(viewTile.tile.plate_index)
         return (color, BLACK, BLACK)
@@ -28,7 +28,7 @@ def color_plates(viewTile, configs):
         return (BLACK, BLACK, WHITE)
     return WHITE, WHITE, RED
 
-def color_faults(viewTile, configs):
+def color_faults(viewTile, config):
     if viewTile.tile.is_selected or viewTile.tile.is_line:
         fill_color = color_dict['line_hex']
         outline_color = color_dict['line_outline']
@@ -43,21 +43,21 @@ def color_faults(viewTile, configs):
         label_color = color_dict['default_label']
     return fill_color, outline_color, label_color
     
-def color_altitude(viewTile, configs):
-    value = 255 * int(viewTile.tile.altitude) // configs['max_altitude']
+def color_altitude(viewTile, config):
+    value = 255 * int(viewTile.tile.altitude) // config['max_altitude']
     return (value, value, value), (value, value, value), RED
 
-def color_hydro(viewTile, configs):
-    if viewTile.tile.altitude <= configs['sea_level']:
+def color_hydro(viewTile, config):
+    if viewTile.tile.altitude <= config['sea_level']:
         return (32, 128, 255), (32, 128, 255), BLACK
-    return color_altitude(viewTile, configs)
+    return color_altitude(viewTile, config)
     
 def color_generator(index):
     if index is None: # fault
         return (0,0,0)
     
-    # Total combinations: 6x7 = 42. Change this if the multipliers array is changed
-    if index >= 42:
+    # Total combinations: 6x6 = 36. Change this if the multipliers array is changed
+    if index >= 36:
         return (255, 255, 255) # return White if out of bounds
         
     matrices = [
@@ -75,8 +75,7 @@ def color_generator(index):
         (255, 165),
         (165, 255),
         (192, 96),
-        (96, 192),
-        (128, 128)
+        (96, 192)
     ]
 
     # Calculate sub-indices directly from the provided index

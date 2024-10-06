@@ -21,7 +21,7 @@ class HexViewTile:
     
     def draw(self, screen, camera):
         # Determine colors based on tile status
-        fill_color, outline_color, label_color = self.gridview.func_color(self, self.gridview.configs)
+        fill_color, outline_color, label_color = self.gridview.func_color(self, self.gridview.config)
 
         # Get transformed corners
         world_corners = self.get_corners()
@@ -40,13 +40,13 @@ class HexViewTile:
         
 
 class HexView:
-    def __init__(self, hexgrid, size, func_color, configs, offset_x=100, offset_y=100):
+    def __init__(self, hexgrid, size, func_color, config, offset_x=100, offset_y=100):
         self.grid = hexgrid
         self.offset_x = offset_x
         self.offset_y = offset_y
         self.size = size
         self.func_color = func_color
-        self.configs = configs
+        self.config = config
         HEX_HEIGHT = math.sqrt(3) * self.size
         HEX_WIDTH = 2 * self.size
         VERTICAL_SPACING = HEX_HEIGHT
