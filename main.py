@@ -4,6 +4,7 @@ import sys
 import traceback
 from camera import Camera
 from hex_view import HexView
+from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
 
@@ -14,8 +15,11 @@ from neighbor_functions import get_neighbors_wraparound
 # Screen settings
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 800
-BACKGROUND_COLOR = (0, 0, 0)  # White background
-FPS = 60 # CAP the frame rate at 60 FPS
+BACKGROUND_COLOR = (0, 0, 0)  # Black background
+FPS = 60  # Cap the frame rate at 60 FPS
+
+# Panel settings
+PANEL_WIDTH = 200  # Width of the left-side panel
 
 # Hexagon settings
 HEX_SIZE = 20  # Adjusted size
@@ -30,8 +34,8 @@ INITIAL_GRID_ROWS = 50  # Increased grid size for better visual effect
 
 # Zoom settings
 ZOOM_STEP = 1.1  # Zoom in/out factor per mouse wheel event
-MIN_ZOOM = 0.5    # Minimum zoom level
-MAX_ZOOM = 3.0    # Maximum zoom level
+MIN_ZOOM = 0.5   # Minimum zoom level
+MAX_ZOOM = 3.0   # Maximum zoom level
 
 # Number of tiles to select for fault generation
 INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
@@ -65,15 +69,56 @@ def main():
         pan_start_offset = pygame.math.Vector2(0, 0)
 
         # Initial map generation
+        gen_method = GEN_METHOD
+        n_selected_tiles = INITIAL_N_SELECTED_TILES
         hex_grid = generate_map(
-            GEN_METHOD,
+            gen_method,
             cols=INITIAL_GRID_COLS,
             rows=INITIAL_GRID_ROWS,
-            n_selected=INITIAL_N_SELECTED_TILES,
+            n_selected=n_selected_tiles,
             func_neighbors=get_neighbors_wraparound
         )
+        
+        configs = {
+            "max_altitude": 15000,
+            "sea_level": 7000
+        }
 
-        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
+        # HexViews for different tabs
+        hex_views = {
+            "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, configs=configs, offset_x=100, offset_y=100),
+            "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, configs=configs, offset_x=100, offset_y=100),
+            "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, configs=configs, offset_x=100, offset_y=100),
+            "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, configs=configs, offset_x=100, offset_y=100)
+        }
+        current_tab = "Plates"
+
+        # Fonts
+        font = pygame.font.SysFont('Arial', 18)
+
+        # Left panel rectangle
+        panel_rect = pygame.Rect(0, 0, PANEL_WIDTH, SCREEN_HEIGHT)
+
+        # Main view rectangle
+        main_view_rect = pygame.Rect(PANEL_WIDTH, 0, SCREEN_WIDTH - PANEL_WIDTH, SCREEN_HEIGHT)
+
+        # Tab buttons
+        tabs = ["Plates", "Faults", "Elevation", "Hydro"]
+        tab_buttons = []
+        tab_button_height = 30
+        tab_button_width = 100
+        for idx, tab in enumerate(tabs):
+            button_rect = pygame.Rect(
+                PANEL_WIDTH + idx * tab_button_width, 0, tab_button_width, tab_button_height)
+            tab_buttons.append((tab, button_rect))
+
+        # Buttons and controls in the left panel
+        regenerate_button_rect = pygame.Rect(20, 50, PANEL_WIDTH - 40, 30)
+        gen_method_label_rect = pygame.Rect(20, 100, PANEL_WIDTH - 40, 20)
+        gen_method_button_rect = pygame.Rect(20, 130, PANEL_WIDTH - 40, 30)
+        n_selected_label_rect = pygame.Rect(20, 180, PANEL_WIDTH - 40, 20)
+        n_selected_increase_rect = pygame.Rect(20, 210, (PANEL_WIDTH - 60) // 2, 30)
+        n_selected_decrease_rect = pygame.Rect(40 + (PANEL_WIDTH - 60) // 2, 210, (PANEL_WIDTH - 60) // 2, 30)
 
         # Main loop flag
         running = True
@@ -85,16 +130,49 @@ def main():
 
                 # Handle zooming with mouse wheel
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 4:  # Mouse wheel up to zoom in
-                        mouse_pos = event.pos
-                        camera.adjust_zoom(ZOOM_STEP, mouse_pos)
-                    elif event.button == 5:  # Mouse wheel down to zoom out
-                        mouse_pos = event.pos
-                        camera.adjust_zoom(1 / ZOOM_STEP, mouse_pos)
-                    elif event.button == 1:  # Left mouse button to start panning
-                        is_panning = True
-                        pan_start_pos = pygame.math.Vector2(event.pos)
-                        pan_start_offset = camera.offset.copy()
+                    # Check if mouse is over the main view pane
+                    if main_view_rect.collidepoint(event.pos):
+                        if event.button == 4:  # Mouse wheel up to zoom in
+                            mouse_pos = event.pos
+                            camera.adjust_zoom(ZOOM_STEP, mouse_pos)
+                        elif event.button == 5:  # Mouse wheel down to zoom out
+                            mouse_pos = event.pos
+                            camera.adjust_zoom(1 / ZOOM_STEP, mouse_pos)
+                        elif event.button == 1:  # Left mouse button to start panning
+                            is_panning = True
+                            pan_start_pos = pygame.math.Vector2(event.pos)
+                            pan_start_offset = camera.offset.copy()
+                    else:
+                        # Check if mouse is over the left panel controls
+                        if regenerate_button_rect.collidepoint(event.pos):
+                            # Regenerate the map with current settings
+                            hex_grid = generate_map(
+                                gen_method,
+                                cols=INITIAL_GRID_COLS,
+                                rows=INITIAL_GRID_ROWS,
+                                n_selected=n_selected_tiles
+                            )
+                            # Update hex views
+                            hex_views = {
+                                "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, configs=configs, offset_x=100, offset_y=100),
+                                "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, configs=configs, offset_x=100, offset_y=100),
+                                "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, configs=configs, offset_x=100, offset_y=100),
+                                "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, configs=configs, offset_x=100, offset_y=100)
+                            }
+                        elif gen_method_button_rect.collidepoint(event.pos):
+                            # Toggle generation method
+                            gen_method = 1 - gen_method
+                        elif n_selected_increase_rect.collidepoint(event.pos):
+                            # Increase n_selected_tiles
+                            n_selected_tiles += 1
+                        elif n_selected_decrease_rect.collidepoint(event.pos):
+                            # Decrease n_selected_tiles
+                            if n_selected_tiles > 1:
+                                n_selected_tiles -= 1
+                        # Check if mouse is over a tab button
+                        for tab, button_rect in tab_buttons:
+                            if button_rect.collidepoint(event.pos):
+                                current_tab = tab
 
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:  # Left mouse button to stop panning
@@ -108,21 +186,89 @@ def main():
 
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
-                        # Regenerate the map
+                        # Regenerate the map with current settings
                         hex_grid = generate_map(
-                            GEN_METHOD,
+                            gen_method,
                             cols=INITIAL_GRID_COLS,
                             rows=INITIAL_GRID_ROWS,
-                            n_selected=INITIAL_N_SELECTED_TILES
+                            n_selected=n_selected_tiles
                         )
-                        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
+                        # Update hex views
+                        hex_views = {
+                            "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, configs=configs, offset_x=100, offset_y=100),
+                            "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, configs=configs, offset_x=100, offset_y=100),
+                            "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, configs=configs, offset_x=100, offset_y=100),
+                            "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, configs=configs, offset_x=100, offset_y=100)
+                        }
 
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
 
-            # Draw the hex grid with labels
-            if hex_view:
-                hex_view.draw(screen, camera)
+            # Draw main view pane background
+            pygame.draw.rect(screen, BACKGROUND_COLOR, main_view_rect)
+
+            # Draw the hex grid within the main view pane
+            if current_tab and hex_views.get(current_tab):
+                # Create a surface for the main view
+                main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height))
+                main_view_surface.fill(BACKGROUND_COLOR)  # Background color
+
+                # Adjust camera offset to consider the main view pane position
+                adjusted_camera = Camera(
+                    zoom=camera.zoom,
+                    offset=(camera.offset[0] - PANEL_WIDTH, camera.offset[1]),
+                    min_zoom=MIN_ZOOM,
+                    max_zoom=MAX_ZOOM
+                )
+
+                hex_views[current_tab].draw(main_view_surface, adjusted_camera)
+
+                # Blit the main view surface onto the screen at the correct position
+                screen.blit(main_view_surface, (PANEL_WIDTH, 0))
+
+            # Draw tabs
+            for tab, button_rect in tab_buttons:
+                color = (100, 100, 100) if tab == current_tab else (50, 50, 50)
+                pygame.draw.rect(screen, color, button_rect)
+                text_surface = font.render(tab, True, (255, 255, 255))
+                text_rect = text_surface.get_rect(center=button_rect.center)
+                screen.blit(text_surface, text_rect)
+
+            # Draw left panel
+            pygame.draw.rect(screen, (30, 30, 30), panel_rect)
+
+            # Draw regenerate button
+            pygame.draw.rect(screen, (70, 70, 70), regenerate_button_rect)
+            regen_text = font.render("Regenerate", True, (255, 255, 255))
+            regen_text_rect = regen_text.get_rect(center=regenerate_button_rect.center)
+            screen.blit(regen_text, regen_text_rect)
+
+            # Draw generation method label and button
+            gen_method_label = font.render("Generation Method:", True, (255, 255, 255))
+            screen.blit(gen_method_label, gen_method_label_rect.topleft)
+            gen_method_text = "Plate Tectonics" if gen_method == 1 else "Fault Lines"
+            pygame.draw.rect(screen, (70, 70, 70), gen_method_button_rect)
+            method_text = font.render(gen_method_text, True, (255, 255, 255))
+            method_text_rect = method_text.get_rect(center=gen_method_button_rect.center)
+            screen.blit(method_text, method_text_rect)
+
+            # Draw n_selected_tiles label and buttons
+            n_selected_label = font.render("Number of Plates:", True, (255, 255, 255))
+            screen.blit(n_selected_label, n_selected_label_rect.topleft)
+            # Increase button
+            pygame.draw.rect(screen, (70, 70, 70), n_selected_increase_rect)
+            inc_text = font.render("+", True, (255, 255, 255))
+            inc_text_rect = inc_text.get_rect(center=n_selected_increase_rect.center)
+            screen.blit(inc_text, inc_text_rect)
+            # Decrease button
+            pygame.draw.rect(screen, (70, 70, 70), n_selected_decrease_rect)
+            dec_text = font.render("-", True, (255, 255, 255))
+            dec_text_rect = dec_text.get_rect(center=n_selected_decrease_rect.center)
+            screen.blit(dec_text, dec_text_rect)
+            # Display current n_selected_tiles value
+            n_selected_value_text = font.render(str(n_selected_tiles), True, (255, 255, 255))
+            n_selected_value_rect = n_selected_value_text.get_rect(center=(PANEL_WIDTH // 2, 260))
+            screen.blit(n_selected_value_text, n_selected_value_rect)
 
             # Update the display
             pygame.display.flip()

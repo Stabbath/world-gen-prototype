@@ -21,6 +21,8 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 # TODO - add a config option once plate merging is implemented, as part of plate merging - boolean: start by merging all plates touching each pole and then exclude those plates from any more merges
 
 # TODO - add a config option to tectonic method: turn non-wraparound edges into faults with -1 GenFactor. To force oceans at the poles.
+# TODO - add a config option to tectonic method: plate properties: continental or oceanic. A continental plate gets an initial boost to its altitude to every tile. An oceanic one gets a symmetric decrease.
+# ^ note i already have a similar concept written down somewhere else
 
 # TODO - move this to utils
 def gaussian_in_range(mean=0, std_dev=0.7, min=-1, max=1):
