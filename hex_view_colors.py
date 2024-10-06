@@ -1,6 +1,7 @@
-WHITE = (255,255,255)
-BLACK = (0,0,0)
-RED   = (255,0,0)
+WHITE  = (255,255,255)
+BLACK  = (0,0,0)
+RED    = (255,0,0)
+YELLOW = (255,255,0)
 
 # Colors (default values)
 DEFAULT_HEX_COLOR = (173, 216, 230)               # Light blue (ocean)
@@ -43,12 +44,12 @@ def color_faults(viewTile, configs):
     return fill_color, outline_color, label_color
     
 def color_altitude(viewTile, configs):
-    value = 255 * int(viewTile.tile.altitude) // configs.max_altitude
-    return (value, value, value)
+    value = 255 * int(viewTile.tile.altitude) // configs['max_altitude']
+    return (value, value, value), (value, value, value), RED
 
 def color_hydro(viewTile, configs):
-    if viewTile.tile.altitude <= configs.sea_level:
-        return (32, 98, 255), (32, 98, 255), BLACK
+    if viewTile.tile.altitude <= configs['sea_level']:
+        return (32, 128, 255), (32, 128, 255), BLACK
     return color_altitude(viewTile, configs)
     
 def color_generator(index):
