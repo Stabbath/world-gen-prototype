@@ -1,6 +1,5 @@
 from generators.tectonic_generator_faults import generate_world_faults
 from generators.tectonic_generator_plates import generate_world_plates
-from abc import ABC, abstractmethod
 
 # TODO - this will become the way we interface with the generation later.
 # "config" will list the customizable options for generation, e.g. number of plates or lines, the data type and acceptable range
@@ -19,6 +18,15 @@ GEN_METHOD = 0  # Set to 0 for fault-based generation, 1 for plate-based generat
 MAX_ALTITUDE = 20000
 SEA_LEVEL = 10000
 
+
+# === BASE IDEA ===
+# We store default values for configurable settings here.
+# We also set the structure of the input fields to match those settings.
+# We consider that each "method", which might be a part of a larger method (e.g. PLATES method can have different ways of calculating elevation map), is just a generic "method", we don't distinguish them.
+# Config properties for the top level, in both logic and UI layout, are stored at the root level of config, under their id. The core object is a generic dictionary.
+# Config properties for methods, in both logic and UI layout, are stored inside a child dictionary, under a property of the root which is named after the id of the method.
+# So, we just need to be careful not to have duplicate id's, knowing especially that a global property cannot have the same name as any method, no matter the method's level.
+
 def default_config():
     return {
         "gen_method": GEN_METHOD,
@@ -26,12 +34,16 @@ def default_config():
         "sea_level": SEA_LEVEL,
         "width": INITIAL_GRID_COLS,
         "height": INITIAL_GRID_ROWS,
-        "startpoint_count": INITIAL_N_SELECTED_TILES,
+        "startpoint_count": INITIAL_N_SELECTED_TILES # TODO - this should be only for faults and plates methods, not generic
     }
 
 def default_config_plates():
     config = default_config()
     config['gen_method'] = 1
+    # config['altitude_gen_method'] = 'generator_consumer' # TODO
+    config['individual_spread'] = False
+    config['random_pop'] = True
+    config['fault_smoothing'] = True
     config['generator_consumer'] = {}
     config['generator_consumer']['max_iter'] = 100
     config['generator_consumer']['max_genfactor'] = 1
@@ -39,84 +51,121 @@ def default_config_plates():
     config['generator_consumer']['smoothen_genfactors'] = False
     return config
 
-# # Basically, the structure of a method is as follows:
-# # name
-# # id (unique)
-# # props (each prop should have a name, id, type, and default value. These will be inputs we add dynamically to the config panel)
-# # submethods (a list of sub-method selectors. Each stores a name (label for the Select field), id, and list of methods which are the options for that field. This should be nestable, so a method in a submethod can have submethods of its own)
 
-
-
-# class PlatesMethod(GenerationMethod):
-#     def __init__(self):
-#         self.func = generate_world_plates
-#         self.props = {
-#             'random_pop': True,
-#             'fault_smoothing': True,
-#             'individual_spread': False
-#         }
-
-#     def get_name(self): return 'Tectonic'
-    
-#     def get_id(self): return 'tectonic'
-
-#     def get_props_ui(self):
-#         return [
-#             {
-#                 'id': 'random_pop',
-#                 'name': 'Random Pop',
-#                 'type': bool
-#             },
-#             {
-#                 'id': 'fault_smoothing',
-#                 'name': 'Fault Reduce',
-#                 'type': bool
-#             },
-#             {
-#                 'id': 'individual_spread',
-#                 'name': 'Individual Spread',
-#                 'type': bool
-#             }
-#         ] + super.get_props_ui()
-
-#     def get_props(self):
-#         return self.props
-
-#     def set_prop(self, prop, value):
-#         self.props[prop] = value
-
-#     def generate(self, props):
-        
-        
-            
-# class PlatesMethod(GenerationMethod)
+#  TODO - don't forget this idea
+def get_valid_altitude_gen_methods(method):
+    if method == 'plates':
+        return ['generator_consumer']
+    elif method == 'faults':
+        return []
+    return []
     
 
-# FAULTS_METHOD_CFG = {
-#     'name': 'Faults',
-#     'id': 'faults',
-#     'func': generate_world_faults,
-#     'props': []
-# }
 
-# TECTONIC_METHOD_CFG = {
-#     'name': 'Tectonic',
-#     'id': 'tectonic',
-#     'props': [
+# === BASE IDEA (cont.) - UI ===
+# Each field is stored as an object, which has a name, id, type, and optionally also filter.
+#   type can be any standard data type, or 'select'
+#       the options to be made available for any given select are stored in a common "select_options" dict, indexed by the id of the input
+#   filter is a function which binds any value sent to it to an accepted range
 
-#     ],
-#     'submethods': [
-#         {
-#             'id': 'tectonic_sub',
-#             'name': 'Submethod',
-#             'methods': [
-#                 PLATES_METHOD_CFG,
-#                 FAULTS_METHOD_CFG
-#             ]
-#         }
-#     ]
-# }
+# NOTE - default values for UI fields should be fetched from the default config above. Id's MUST match
 
+# === FILTER FUNCTIONS FOR INPUTS ===
+def filter_positive_integer(new_val, old_val):
+    # TODO - add type checks, return old_val if new_val is not an int (and can't be converted to one)
+    if new_val < 1:
+        return 1
+    return int(new_val)
 
+def filter_positive_float(new_val, old_val):
+    # TODO - add type checks, return old_val if new_val is not a float (and can't be converted to one)
+    if new_val <= 0.0:
+        return 0.0
+    return new_val
+
+# === CORE FIELDS === 
+ui_fields = {}
+select_options = {} # For 'select' inputs
+ui_fields['base_method'] = {
+    'name': 'Method',
+    'id': 'base_method',
+    'type': 'select'
+}
+select_options['base_method'] = [
+    'plates', 'faults'
+]
+
+ui_fields['height'] = {
+    'name': 'Height',
+    'id': 'height',
+    'type': int,
+    'filter': filter_positive_integer
+}
+ui_fields['width'] = {
+    'name': 'Width',
+    'id': 'width',
+    'type': int,
+    'filter': filter_positive_integer
+}
+ui_fields['max_altitude'] = {
+    'name': 'Max Elevation',
+    'id': 'max_altitude',
+    'type': int,
+    'filter': filter_positive_integer
+}
+ui_fields['sea_level'] = {
+    'name': 'Sea Level',
+    'id': 'sea_level',
+    'type': int,
+    'filter': filter_positive_integer
+}
+
+# === PLATES FIELDS === 
+ui_fields['plates'] = {}
+ui_fields['plates']['individual_spread'] = {
+    'name': 'Individual Spread?',
+    'id': 'individual_spread',
+    'type': bool
+}
+ui_fields['plates']['random_pop'] = {
+    'name': 'Random Queue Pop?',
+    'id': 'random_pop',
+    'type': bool
+}
+ui_fields['plates']['fault_smoothing'] = {
+    'name': 'Reduce and Smoothen Faults?',
+    'id': 'fault_smoothing',
+    'type': bool
+}
+
+# === GENERATOR/CONSUMER FIELDS ===
+ui_fields['generator_consumer'] = {}
+ui_fields['generator_consumer']['max_iter'] = {
+    'name': 'Iterations',
+    'id': 'max_iter',
+    'type': int,
+    'filter': filter_positive_integer
+}
+ui_fields['generator_consumer']['max_genfactor'] = {
+    'name': 'Gen Factor Multiplier',
+    'id': 'max_genfactor',
+    'type': float,
+    'filter': filter_positive_float
+}
+ui_fields['generator_consumer']['noise_factor'] = {
+    'name': 'Noise Factor',
+    'id': 'noise_factor',
+    'type': float,
+    'filter': filter_positive_float
+}
+ui_fields['generator_consumer']['smoothen_genfactors'] = {
+    'name': 'Smoothen Gen Factors?',
+    'id': 'smoothen_genfactors',
+    'type': bool
+}
+
+# === FAULTS FIELDS === 
+ui_fields['faults'] = {}
+# ...
 
         

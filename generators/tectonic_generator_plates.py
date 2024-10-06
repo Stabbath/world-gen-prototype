@@ -16,7 +16,6 @@ def randpop(l):
 
 # TODO - move these variables into the external configurations
 popfunc = randpop
-individual_spread = False
 growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 # TODO - add a config option once plate merging is implemented, as part of plate merging - boolean: start by merging all plates touching each pole and then exclude those plates from any more merges
@@ -27,9 +26,10 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 
 def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound):
+    individual_spread = config['individual_spread']
     plate_count = config['startpoint_count']
     MAXALTITUDE = config['max_altitude']
-    grid = plate_method(grid, plate_count, func_neighbors)  # TODO - gui's alternative would be here instead of plate_method
+    grid = plate_method(grid, plate_count, individual_spread, func_neighbors)
     
     # === Step 1: Generation of Plates and Faults === 
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
@@ -355,7 +355,7 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
 
     return grid
 
-def plate_method(grid, plate_count, func_neighbors):
+def plate_method(grid, plate_count, individual_spread, func_neighbors):
     # Initialize neighbors queues for each plate
     plate_queues = [ deque() for _ in range(plate_count) ]
 
