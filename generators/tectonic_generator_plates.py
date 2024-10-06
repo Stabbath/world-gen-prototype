@@ -3,7 +3,7 @@ import random
 from collections import deque, defaultdict
 from neighbor_functions import get_neighbors_wraparound
 from generators.tectonic_fault_smoothing import smooth_faults
-from utils import gaussian_in_range
+from generators.tectonic_altitude_generators import generator_consumer_model
 
 def leftpop(l):
     return l.popleft()
@@ -24,106 +24,29 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 # TODO - add a config option to tectonic method: plate properties: continental or oceanic. A continental plate gets an initial boost to its altitude to every tile. An oceanic one gets a symmetric decrease.
 # ^ note i already have a similar concept written down somewhere else
 
+# TODO - also consider a variant option for the consumer-generator model's smoothing: alternate avg() functions, like doing signed quadratic instead (x^2 but keep sign), or square root actually might be better, to spread height differences faster.
 
 def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound):
     individual_spread = config['individual_spread']
     plate_count = config['startpoint_count']
-    MAXALTITUDE = config['max_altitude']
     grid = plate_method(grid, plate_count, individual_spread, func_neighbors)
     
     # === Step 1: Generation of Plates and Faults === 
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
-    # Straightforward - when we're expanding our plates and run into a filled neighbor, we turn the tile into a fault.
     plates, faults = detect_plates_and_faults(grid)
     grid.set_plates_from_lists(plates)
     grid.set_faults_from_lists(faults)
 
     # TODO - this feels dirty just throwing it on here like this, maybe clean it up later
     for fault in grid.faults:
-        fault.refresh_neighbor_groups()
+        fault.refresh_neighbor_groups() # we need faults to know their neighboring faults if we want to smoothen their gen factors
     
-    # === Step 2: Assignment of Fault and/or Plate Properties ===
-    # This is deeply connected to step 3. Our altitude generation depends on the properties we include. 
-    # And for the same properties, there may be different altitude generation methods.
-    # For now, just assuming my initial method. Later, we'll need to possibly restructure/extract things to make it more flexible, with different combinations of Property Assignment and Altitude Map Generation
-
-    # GENERATOR/CONSUMER MODEL
-    # These settings should come from the gen config later.
+    # === Steps 2 and 3: Assignment of Plate/Fault Properties, and Elevation Map Generation ===
+    # They're intimately connected, even if we can combine them separately. But the properties we assing in Step 2 define the generators we can use in Step 3.
+    # So, for now, just keep them merged.
     
-    MAX_ITER = config['generator_consumer']['max_iter']
-    MAXGENFACTOR = config['generator_consumer']['max_genfactor']
-    NOISE_FACTOR = config['generator_consumer']['noise_factor']
-    SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
-
-    # First, we assign to each fault a float between 1 and -1, completely at random. This is its Generation Factor. If negative, it means it consumes mass. If positive, it generates it.
-    # We use a dictionary, external to the Fault class.
-    generation_factors = {}
-    for fault in grid.faults:
-        generation_factors[fault.id] = gaussian_in_range(min=-1, max=1)
-
-    # Then we smooth these factors: we check for each fault its neighboring faults, and the Generation Factor we have for it,
-    # and we recalculate them all as a weighted average of their own factor and their neighbors', with their own factor being worth twice as much for the average.
-    if SMOOTHEN_GENFACTORS:
-        smoothed_generation_factors = {}
-        for fault in grid.faults:
-            own_factor = generation_factors[fault.id]
-            neighbor_indices = fault.get_fault_neighbor_indices()
-            neighbor_factors = [generation_factors[neighbor_index] for neighbor_index in neighbor_indices]
-            total_weight = 2 + len(neighbor_factors)
-            weighted_sum = 2 * own_factor + sum(neighbor_factors)
-            smoothed_factor = weighted_sum / total_weight
-            smoothed_generation_factors[fault.id] = smoothed_factor
-        generation_factors = smoothed_generation_factors
-    
-    # Then, we renormalize everything so that the lowest is -1 and the highest is +1.
-    factor_values = generation_factors.values()
-    min_factor = min(factor_values)
-    max_factor = max(factor_values)
-
-    for fault_id, factor in generation_factors.items():
-        normalized_factor = -1 + 2 * (factor - min_factor) / (max_factor - min_factor)
-        generation_factors[fault_id] = normalized_factor
-    
-    # === Step 3: Altitude Map Generation ===
-    # Each iteration has the following steps: 
-    #   1. Each fault adds landmass to itself equal to its generation_factor times the MaxGenFactor
-    #   2. We add a small amount of noise to the entire hex grid.
-    #   3. We smoothen the entire hexgrid based on neighbors
-    for _ in range(MAX_ITER):
-        # Step 1: Each fault adds landmass to itself equal to its generation_factor times the MaxGenFactor
-        for fault in grid.faults:
-            gen_factor = generation_factors[fault.id]
-            mass_change = gen_factor * MAXGENFACTOR
-            for tile in fault.get_tiles():
-                alt = tile.get_altitude()
-                tile.set_altitude(alt + mass_change)
-        
-        # Step 2: Add a small amount of noise to the entire hex grid
-        for tile in grid.get_tiles():
-            alt = tile.get_altitude()
-            noise = random.uniform(-1, 1) * NOISE_FACTOR
-            tile.set_altitude(alt + noise)
-        
-        # Step 3: Smooth the entire hexgrid based on neighbors
-        # Collect current altitudes before smoothing
-        tile_altitudes = {tile: tile.get_altitude() for tile in grid.get_tiles()}
-        for tile in grid.get_tiles():
-            neighbors = tile.get_neighbors()
-            neighbor_alts = [tile_altitudes[neighbor] for neighbor in neighbors]
-            avg_neighbor_alt = sum(neighbor_alts) / len(neighbor_alts)
-            # New altitude is the average of own altitude and neighbors'
-            new_altitude = (tile_altitudes[tile] + avg_neighbor_alt) / 2
-            tile.set_altitude(new_altitude)
-    
-    # Finally, we normalize the altitude of every tile according to MAXALTITUDE, so that the lowest altitude is 0, and the highest altitude is 20000.
-    altitudes = [tile.get_altitude() for tile in grid.get_tiles()]
-    min_altitude = min(altitudes)
-    max_altitude = max(altitudes)
-    
-    for tile in grid.get_tiles():
-        alt = tile.get_altitude()
-        normalized_altitude = (alt - min_altitude) / (max_altitude - min_altitude) * MAXALTITUDE
-        tile.set_altitude(normalized_altitude)
+    # GENERATOR/CONSUMER MODEL - for now, can possibly have different models later
+    grid = generator_consumer_model(grid, config, func_neighbors)
     
     return grid
     
