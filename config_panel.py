@@ -1,197 +1,385 @@
 import pygame
 
+# Define base UIElement class
+class UIElement:
+    def __init__(self):
+        pass
+
+    def draw(self, screen):
+        pass
+
+    def handle_event(self, event):
+        pass
+
+# Label UIElement
+class Label(UIElement):
+    def __init__(self, text, position, font, color=(255, 255, 255)):
+        super().__init__()
+        self.text = text
+        self.position = position
+        self.font = font
+        self.color = color
+        self.rendered_text = self.font.render(self.text, True, self.color)
+
+    def draw(self, screen):
+        screen.blit(self.rendered_text, self.position)
+
+# Button UIElement
+class Button(UIElement):
+    def __init__(self, text, rect, font, callback):
+        super().__init__()
+        self.text = text
+        self.rect = pygame.Rect(rect)
+        self.font = font
+        self.callback = callback
+        self.color = (70, 70, 70)
+        self.text_color = (255, 255, 255)
+        self.hovered = False
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
+        rendered_text = self.font.render(self.text, True, self.text_color)
+        text_rect = rendered_text.get_rect(center=self.rect.center)
+        screen.blit(rendered_text, text_rect)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.hovered = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.callback()
+                return True
+        return False
+
+# InputField UIElement
+class InputField(UIElement):
+    def __init__(self, config, field_info, position, size, font):
+        super().__init__()
+        self.config = config
+        self.field_info = field_info
+        self.rect = pygame.Rect(position, size)
+        self.font = font
+        self.active = False
+        self.text = str(self.get_config_value())
+        self.color_inactive = (70, 70, 70)
+        self.color_active = (100, 100, 100)
+        self.color = self.color_inactive
+        self.text_color = (255, 255, 255)
+        self.cursor_visible = True
+        self.cursor_timer = 0
+        self.cursor_interval = 500  # milliseconds
+
+    def get_config_value(self):
+        keys = self.field_info['config_path']
+        value = self.config
+        for key in keys:
+            value = value[key]
+        return value
+
+    def set_config_value(self, value):
+        keys = self.field_info['config_path']
+        config_section = self.config
+        for key in keys[:-1]:
+            config_section = config_section[key]
+        config_section[keys[-1]] = value
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
+        text_surface = self.font.render(self.text, True, self.text_color)
+        screen.blit(text_surface, (self.rect.x+5, self.rect.y+5))
+        # Handle cursor blinking
+        if self.active:
+            current_time = pygame.time.get_ticks()
+            if current_time - self.cursor_timer > self.cursor_interval:
+                self.cursor_visible = not self.cursor_visible
+                self.cursor_timer = current_time
+            if self.cursor_visible:
+                cursor_x = self.rect.x + 5 + text_surface.get_width()
+                cursor_y = self.rect.y + 5
+                pygame.draw.rect(screen, self.text_color, (cursor_x, cursor_y, 2, text_surface.get_height()))
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # If the user clicked on the input_box rect.
+            if self.rect.collidepoint(event.pos):
+                self.active = not self.active
+                self.color = self.color_active if self.active else self.color_inactive
+            else:
+                self.active = False
+                self.color = self.color_inactive
+        if event.type == pygame.KEYDOWN:
+            if self.active:
+                if event.key == pygame.K_RETURN:
+                    # Apply the filter function if it exists
+                    try:
+                        new_value = self.field_info['type'](self.text)
+                        if 'filter' in self.field_info:
+                            new_value = self.field_info['filter'](new_value, self.get_config_value())
+                        self.set_config_value(new_value)
+                    except ValueError:
+                        pass  # Ignore invalid input
+                    self.active = False
+                    self.color = self.color_inactive
+                elif event.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                return True
+        return False
+
+# Checkbox UIElement
+class Checkbox(UIElement):
+    def __init__(self, config, field_info, position, size, font):
+        super().__init__()
+        self.config = config
+        self.field_info = field_info
+        self.rect = pygame.Rect(position, size)
+        self.font = font
+        self.checked = self.get_config_value()
+        self.box_color = (70, 70, 70)
+        self.check_color = (255, 255, 255)
+        self.label = self.field_info['name']
+        self.text_surface = self.font.render(self.label, True, (255, 255, 255))
+
+    def get_config_value(self):
+        keys = self.field_info['config_path']
+        value = self.config
+        for key in keys:
+            value = value[key]
+        return value
+
+    def set_config_value(self, value):
+        keys = self.field_info['config_path']
+        config_section = self.config
+        for key in keys[:-1]:
+            config_section = config_section[key]
+        config_section[keys[-1]] = value
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.box_color, self.rect)
+        if self.checked:
+            pygame.draw.rect(screen, self.check_color, self.rect.inflate(-10, -10))
+        screen.blit(self.text_surface, (self.rect.right + 10, self.rect.y))
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.checked = not self.checked
+                self.set_config_value(self.checked)
+                return True
+        return False
+
+# Dropdown UIElement
+class Dropdown(UIElement):
+    def __init__(self, config, field_info, position, size, font):
+        super().__init__()
+        self.config = config
+        self.field_info = field_info
+        self.rect = pygame.Rect(position, size)
+        self.font = font
+        self.active = False
+        self.color_inactive = (70, 70, 70)
+        self.color_active = (100, 100, 100)
+        self.color = self.color_inactive
+        self.text_color = (255, 255, 255)
+        self.options = field_info['options']
+        self.selected_option = self.get_config_value()
+        self.expanded = False
+        self.option_rects = []  # Initialize here
+
+    def get_config_value(self):
+        keys = self.field_info['config_path']
+        value = self.config
+        for key in keys:
+            value = value[key]
+        return value
+
+    def set_config_value(self, value):
+        keys = self.field_info['config_path']
+        config_section = self.config
+        for key in keys[:-1]:
+            config_section = config_section[key]
+        config_section[keys[-1]] = value
+
+    def draw(self, screen):
+        # Draw the main dropdown box
+        pygame.draw.rect(screen, self.color, self.rect)
+        text_surface = self.font.render(str(self.selected_option), True, self.text_color)
+        screen.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
+        pygame.draw.polygon(screen, self.text_color, [
+            (self.rect.right - 15, self.rect.y + 10),
+            (self.rect.right - 5, self.rect.y + 10),
+            (self.rect.right - 10, self.rect.y + 15)
+        ])  # Draw a small arrow indicating dropdown
+
+        if self.expanded:
+            # Draw each option
+            for i, option in enumerate(self.options):
+                option_rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.rect.height, self.rect.width, self.rect.height)
+                pygame.draw.rect(screen, self.color_inactive, option_rect)
+                option_text = self.font.render(option, True, self.text_color)
+                screen.blit(option_text, (option_rect.x + 5, option_rect.y + 5))
+                self.option_rects.append((option_rect, option))
+    
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.expanded = not self.expanded
+                return True
+            elif self.expanded:
+                for option_rect, option in self.option_rects:
+                    if option_rect.collidepoint(event.pos):
+                        self.selected_option = option
+                        self.set_config_value(option)
+                        self.expanded = False
+                        self.option_rects.clear()  # Clear after selection
+                        return True
+                self.expanded = False
+                self.option_rects.clear()  # Clear if clicked outside
+        return False
+
+
 class ConfigPanel:
-    def __init__(self, panel_width, screen_height, config, background_color=(30, 30, 30)):
+    def __init__(self, panel_width, screen_height, config, ui_fields, font, action_callback, background_color=(30, 30, 30)):
         self.panel_rect = pygame.Rect(0, 0, panel_width, screen_height)
         self.background_color = background_color
         self.panel_width = panel_width
         self.config = config
+        self.ui_fields = ui_fields
+        self.font = font
+        self.action_callback = action_callback
+        self.ui_elements = []
+        self.build_ui_elements()
 
-        # Buttons and controls in the left panel
-        self.regenerate_button_rect = pygame.Rect(20, 60, panel_width - 40, 30)
-        self.gen_method_label_rect = pygame.Rect(20, 110, panel_width - 40, 20)
-        self.gen_method_button_rect = pygame.Rect(20, 140, panel_width - 40, 30)
-        self.n_selected_label_rect = pygame.Rect(20, 190, panel_width - 40, 20)
-        self.n_selected_increase_rect = pygame.Rect(20, 220, (panel_width - 60) // 2, 30)
-        self.n_selected_decrease_rect = pygame.Rect(40 + (panel_width - 60) // 2, 220, (panel_width - 60) // 2, 30)
+    def build_ui_elements(self):
+        self.ui_elements = []
 
-        # Width controls
-        self.width_label_rect = pygame.Rect(20, 270, panel_width - 40, 20)
-        self.width_increase_rect = pygame.Rect(20, 300, (panel_width - 60) // 2, 30)
-        self.width_decrease_rect = pygame.Rect(40 + (panel_width - 60) // 2, 300, (panel_width - 60) // 2, 30)
+        # Starting position for UI elements
+        x = 20
+        y = 60
+        element_spacing = 40
+        input_width = self.panel_width - 40
+        input_height = 30
 
-        # Height controls
-        self.height_label_rect = pygame.Rect(20, 350, panel_width - 40, 20)
-        self.height_increase_rect = pygame.Rect(20, 380, (panel_width - 60) // 2, 30)
-        self.height_decrease_rect = pygame.Rect(40 + (panel_width - 60) // 2, 380, (panel_width - 60) // 2, 30)
+        # Regenerate Button
+        regenerate_button = Button(
+            text="Regenerate",
+            rect=(x, y, input_width, input_height),
+            font=self.font,
+            callback=self.regenerate_world
+        )
+        self.ui_elements.append(regenerate_button)
+        y += element_spacing + input_height
 
-        # Sea Level controls
-        self.sea_level_label_rect = pygame.Rect(20, 430, panel_width - 40, 20)
-        self.sea_level_increase_rect = pygame.Rect(20, 460, (panel_width - 60) // 2, 30)
-        self.sea_level_decrease_rect = pygame.Rect(40 + (panel_width - 60) // 2, 460, (panel_width - 60) // 2, 30)
+        # Build UI elements based on ui_fields
+        self.add_ui_fields(self.ui_fields, position=(x, y), parent_keys=[])
 
-        # Max Altitude controls
-        self.max_altitude_label_rect = pygame.Rect(20, 510, panel_width - 40, 20)
-        self.max_altitude_increase_rect = pygame.Rect(20, 540, (panel_width - 60) // 2, 30)
-        self.max_altitude_decrease_rect = pygame.Rect(40 + (panel_width - 60) // 2, 540, (panel_width - 60) // 2, 30)
+    def add_ui_fields(self, fields, position, parent_keys):
+        x, y = position
+        element_spacing = 10  # Reduced spacing between label and input
+        input_spacing = 40    # Spacing between input elements
+        input_width = self.panel_width - 40
+        input_height = 30
+    
+        for key, field in fields.items():
+            if isinstance(field, dict) and 'type' in field:
+                # Prepare field info
+                field_info = field.copy()
+                field_info['config_path'] = parent_keys + [field_info['id']]
+                
+                # Label
+                label = Label(
+                    text=field_info['name'],
+                    position=(x, y),
+                    font=self.font
+                )
+                self.ui_elements.append(label)
+                
+                # Get label height to adjust y position
+                label_height = label.rendered_text.get_height()
+                y += label_height + element_spacing
+    
+                # Create appropriate input element
+                if field_info['type'] == 'select':
+                    input_element = Dropdown(
+                        config=self.config,
+                        field_info=field_info,
+                        position=(x, y),
+                        size=(input_width, input_height),
+                        font=self.font
+                    )
+                elif field_info['type'] in [int, float]:
+                    input_element = InputField(
+                        config=self.config,
+                        field_info=field_info,
+                        position=(x, y),
+                        size=(input_width, input_height),
+                        font=self.font
+                    )
+                elif field_info['type'] == bool:
+                    input_element = Checkbox(
+                        config=self.config,
+                        field_info=field_info,
+                        position=(x, y),
+                        size=(input_height, input_height),
+                        font=self.font
+                    )
+                else:
+                    continue  # Unsupported type
+    
+                self.ui_elements.append(input_element)
+                y += input_spacing
+            elif isinstance(field, dict):
+                # Nested fields, check if they should be displayed
+                # For base_method and other conditional fields
+                display = True
+                if parent_keys:
+                    # Check if parent field value matches
+                    config_value = self.config
+                    for key in parent_keys:
+                        config_value = config_value[key]
+                    if parent_keys[-1] == 'base_method' and config_value != key:
+                        display = False
+                    elif parent_keys[-1] == 'altitude_gen_method' and config_value != key:
+                        display = False
+
+                if display:
+                    # Add a separator label
+                    separator_label = Label(
+                        text=field.get('name', key).upper(),
+                        position=(x, y),
+                        font=self.font
+                    )
+                    self.ui_elements.append(separator_label)
+                    y += element_spacing // 2
+                    # Recursively add nested fields
+                    self.add_ui_fields(field, (x, y), parent_keys + [key])
+                    y += element_spacing
+        # Update the panel height if necessary
+        self.panel_rect.height = max(self.panel_rect.height, y + 20)
+
+    def regenerate_world(self):
+        self.action_callback('regen')
 
     def process_event(self, event):
-        # Check if mouse is over the left panel controls
-        if self.regenerate_button_rect.collidepoint(event.pos):
-            return 'regen'
-        elif self.gen_method_button_rect.collidepoint(event.pos):
-            # TODO - this needs to be converted whe we change it to a select
-            if self.config['gen_method'] == 'plates':
-                self.config['gen_method'] = 'faults'
-            else: 
-                self.config['gen_method'] = 'plates'
-            return 'config_changed'
-        elif self.n_selected_increase_rect.collidepoint(event.pos):
-            self.config['startpoint_count'] += 1
-            return 'config_changed'
-        elif self.n_selected_decrease_rect.collidepoint(event.pos):
-            if self.config['startpoint_count'] > 1:
-                self.config['startpoint_count'] -= 1
-                return 'config_changed'
-        elif self.width_increase_rect.collidepoint(event.pos):
-            self.config['width'] += 1
-            return 'config_changed'
-        elif self.width_decrease_rect.collidepoint(event.pos):
-            if self.config['width'] > 1:
-                self.config['width'] -= 1
-                return 'config_changed'
-        elif self.height_increase_rect.collidepoint(event.pos):
-            self.config['height'] += 1
-            return 'config_changed'
-        elif self.height_decrease_rect.collidepoint(event.pos):
-            if self.config['height'] > 1:
-                self.config['height'] -= 1
-                return 'config_changed'
-        elif self.sea_level_increase_rect.collidepoint(event.pos):
-            self.config['sea_level'] += 1000
-            # Ensure sea level does not exceed max altitude
-            if self.config['sea_level'] > self.config['max_altitude']:
-                self.config['sea_level'] = self.config['max_altitude']
-            return 'config_changed'
-        elif self.sea_level_decrease_rect.collidepoint(event.pos):
-            if self.config['sea_level'] >= 1000:
-                self.config['sea_level'] -= 1000
-                return 'config_changed'
-        elif self.max_altitude_increase_rect.collidepoint(event.pos):
-            self.config['max_altitude'] += 1000
-            return 'config_changed'
-        elif self.max_altitude_decrease_rect.collidepoint(event.pos):
-            if self.config['max_altitude'] > 1000:
-                self.config['max_altitude'] -= 1000
-                # Ensure sea level does not exceed max altitude
-                if self.config['sea_level'] > self.config['max_altitude']:
-                    self.config['sea_level'] = self.config['max_altitude']
-                return 'config_changed'
+        for element in self.ui_elements:
+            if element.handle_event(event):
+                # If 'base_method' or other method fields change, rebuild UI
+                if isinstance(element, Dropdown):
+                    if element.field_info['id'] == 'base_method' or element.field_info['id'] == 'altitude_gen_method':
+                        self.build_ui_elements()
+                return True
 
-    def draw(self, screen, font):
+    def draw(self, screen):
         pygame.draw.rect(screen, self.background_color, self.panel_rect)
-
-        # Draw regenerate button
-        pygame.draw.rect(screen, (70, 70, 70), self.regenerate_button_rect)
-        regen_text = font.render("Regenerate", True, (255, 255, 255))
-        regen_text_rect = regen_text.get_rect(center=self.regenerate_button_rect.center)
-        screen.blit(regen_text, regen_text_rect)
-
-        # Draw generation method label and button
-        gen_method_label = font.render("Generation Method:", True, (255, 255, 255))
-        screen.blit(gen_method_label, self.gen_method_label_rect.topleft)
-        gen_method_text = self.config['gen_method']
-        pygame.draw.rect(screen, (70, 70, 70), self.gen_method_button_rect)
-        method_text = font.render(gen_method_text, True, (255, 255, 255))
-        method_text_rect = method_text.get_rect(center=self.gen_method_button_rect.center)
-        screen.blit(method_text, method_text_rect)
-
-        # Draw number of plates label and buttons
-        n_selected_label = font.render("Number of Plates:", True, (255, 255, 255))
-        screen.blit(n_selected_label, self.n_selected_label_rect.topleft)
-        # Increase button
-        pygame.draw.rect(screen, (70, 70, 70), self.n_selected_increase_rect)
-        inc_text = font.render("+", True, (255, 255, 255))
-        inc_text_rect = inc_text.get_rect(center=self.n_selected_increase_rect.center)
-        screen.blit(inc_text, inc_text_rect)
-        # Decrease button
-        pygame.draw.rect(screen, (70, 70, 70), self.n_selected_decrease_rect)
-        dec_text = font.render("-", True, (255, 255, 255))
-        dec_text_rect = dec_text.get_rect(center=self.n_selected_decrease_rect.center)
-        screen.blit(dec_text, dec_text_rect)
-        # Display current number of plates value
-        n_selected_value_text = font.render(str(self.config['startpoint_count']), True, (255, 255, 255))
-        n_selected_value_rect = n_selected_value_text.get_rect(center=(self.panel_width // 2, 235))
-        screen.blit(n_selected_value_text, n_selected_value_rect)
-
-        # Draw width label and buttons
-        width_label = font.render("Width:", True, (255, 255, 255))
-        screen.blit(width_label, self.width_label_rect.topleft)
-        # Increase button
-        pygame.draw.rect(screen, (70, 70, 70), self.width_increase_rect)
-        inc_text = font.render("+", True, (255, 255, 255))
-        inc_text_rect = inc_text.get_rect(center=self.width_increase_rect.center)
-        screen.blit(inc_text, inc_text_rect)
-        # Decrease button
-        pygame.draw.rect(screen, (70, 70, 70), self.width_decrease_rect)
-        dec_text = font.render("-", True, (255, 255, 255))
-        dec_text_rect = dec_text.get_rect(center=self.width_decrease_rect.center)
-        screen.blit(dec_text, dec_text_rect)
-        # Display current width value
-        width_value_text = font.render(str(self.config['width']), True, (255, 255, 255))
-        width_value_rect = width_value_text.get_rect(center=(self.panel_width // 2, 315))
-        screen.blit(width_value_text, width_value_rect)
-
-        # Draw height label and buttons
-        height_label = font.render("Height:", True, (255, 255, 255))
-        screen.blit(height_label, self.height_label_rect.topleft)
-        # Increase button
-        pygame.draw.rect(screen, (70, 70, 70), self.height_increase_rect)
-        inc_text = font.render("+", True, (255, 255, 255))
-        inc_text_rect = inc_text.get_rect(center=self.height_increase_rect.center)
-        screen.blit(inc_text, inc_text_rect)
-        # Decrease button
-        pygame.draw.rect(screen, (70, 70, 70), self.height_decrease_rect)
-        dec_text = font.render("-", True, (255, 255, 255))
-        dec_text_rect = dec_text.get_rect(center=self.height_decrease_rect.center)
-        screen.blit(dec_text, dec_text_rect)
-        # Display current height value
-        height_value_text = font.render(str(self.config['height']), True, (255, 255, 255))
-        height_value_rect = height_value_text.get_rect(center=(self.panel_width // 2, 395))
-        screen.blit(height_value_text, height_value_rect)
-
-        # Draw sea level label and buttons
-        sea_level_label = font.render("Sea Level:", True, (255, 255, 255))
-        screen.blit(sea_level_label, self.sea_level_label_rect.topleft)
-        # Increase button
-        pygame.draw.rect(screen, (70, 70, 70), self.sea_level_increase_rect)
-        inc_text = font.render("+", True, (255, 255, 255))
-        inc_text_rect = inc_text.get_rect(center=self.sea_level_increase_rect.center)
-        screen.blit(inc_text, inc_text_rect)
-        # Decrease button
-        pygame.draw.rect(screen, (70, 70, 70), self.sea_level_decrease_rect)
-        dec_text = font.render("-", True, (255, 255, 255))
-        dec_text_rect = dec_text.get_rect(center=self.sea_level_decrease_rect.center)
-        screen.blit(dec_text, dec_text_rect)
-        # Display current sea level value
-        sea_level_value_text = font.render(str(self.config['sea_level']), True, (255, 255, 255))
-        sea_level_value_rect = sea_level_value_text.get_rect(center=(self.panel_width // 2, 475))
-        screen.blit(sea_level_value_text, sea_level_value_rect)
-
-        # Draw max altitude label and buttons
-        max_altitude_label = font.render("Max Altitude:", True, (255, 255, 255))
-        screen.blit(max_altitude_label, self.max_altitude_label_rect.topleft)
-        # Increase button
-        pygame.draw.rect(screen, (70, 70, 70), self.max_altitude_increase_rect)
-        inc_text = font.render("+", True, (255, 255, 255))
-        inc_text_rect = inc_text.get_rect(center=self.max_altitude_increase_rect.center)
-        screen.blit(inc_text, inc_text_rect)
-        # Decrease button
-        pygame.draw.rect(screen, (70, 70, 70), self.max_altitude_decrease_rect)
-        dec_text = font.render("-", True, (255, 255, 255))
-        dec_text_rect = dec_text.get_rect(center=self.max_altitude_decrease_rect.center)
-        screen.blit(dec_text, dec_text_rect)
-        # Display current max altitude value
-        max_altitude_value_text = font.render(str(self.config['max_altitude']), True, (255, 255, 255))
-        max_altitude_value_rect = max_altitude_value_text.get_rect(center=(self.panel_width // 2, 555))
-        screen.blit(max_altitude_value_text, max_altitude_value_rect)
+        
+        # First draw all UI elements except expanded dropdowns
+        for element in self.ui_elements:
+            if isinstance(element, Dropdown) and element.expanded:
+                continue  # Skip expanded dropdowns for now
+            element.draw(screen)
+        
+        # Then draw expanded dropdowns on top
+        for element in self.ui_elements:
+            if isinstance(element, Dropdown) and element.expanded:
+                element.draw(screen)

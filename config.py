@@ -12,9 +12,6 @@ INITIAL_GRID_ROWS = 50  # Increased grid size for better visual effect
 # Number of tiles to select for fault generation
 INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
 
-# Generation method
-GEN_METHOD = 0  # Set to 0 for fault-based generation, 1 for plate-based generation
-
 MAX_ALTITUDE = 20000
 SEA_LEVEL = 10000
 
@@ -28,39 +25,26 @@ SEA_LEVEL = 10000
 # So, we just need to be careful not to have duplicate id's, knowing especially that a global property cannot have the same name as any method, no matter the method's level.
 
 def default_config():
-    return {
-        "gen_method": GEN_METHOD,
+    config = {
         "max_altitude": MAX_ALTITUDE,
         "sea_level": SEA_LEVEL,
         "width": INITIAL_GRID_COLS,
         "height": INITIAL_GRID_ROWS,
         "startpoint_count": INITIAL_N_SELECTED_TILES # TODO - this should be only for faults and plates methods, not generic
     }
-
-def default_config_plates():
-    config = default_config()
     config['gen_method'] = 'plates'
-    # config['altitude_gen_method'] = 'generator_consumer' # TODO
-    config['individual_spread'] = False
-    config['random_pop'] = True
-    config['fault_smoothing'] = True
+    config['plates'] = {}
+    config['plates']['altitude_gen_method'] = 'generator_consumer'
+    config['plates']['individual_spread'] = False
+    config['plates']['random_pop'] = True
+    config['plates']['fault_smoothing'] = True
+    config['faults'] = {}
     config['generator_consumer'] = {}
     config['generator_consumer']['max_iter'] = 100
     config['generator_consumer']['max_genfactor'] = 1
     config['generator_consumer']['noise_factor'] = 0.02
     config['generator_consumer']['smoothen_genfactors'] = False
     return config
-
-
-#  TODO - don't forget this idea
-def get_valid_altitude_gen_methods(method):
-    if method == 'plates':
-        return ['generator_consumer']
-    elif method == 'faults':
-        return []
-    return []
-    
-
 
 # === BASE IDEA (cont.) - UI ===
 # Each field is stored as an object, which has a name, id, type, and optionally also filter.
@@ -85,15 +69,14 @@ def filter_positive_float(new_val, old_val):
 
 # === CORE FIELDS === 
 ui_fields = {}
-select_options = {} # For 'select' inputs
-ui_fields['base_method'] = {
+ui_fields['gen_method'] = {
     'name': 'Method',
-    'id': 'base_method',
-    'type': 'select'
+    'id': 'gen_method',
+    'type': 'select',
+    'options': [
+        'plates', 'faults'
+    ]
 }
-select_options['base_method'] = [
-    'plates', 'faults'
-]
 
 ui_fields['height'] = {
     'name': 'Height',
@@ -122,6 +105,14 @@ ui_fields['sea_level'] = {
 
 # === PLATES FIELDS === 
 ui_fields['plates'] = {}
+ui_fields['plates']['altitude_gen_method'] = {
+    'name': 'Elevation Map Generator',
+    'id': 'altitude_gen_method',
+    'type': 'select',
+    'options': [
+        'generator_consumer'
+    ]
+}
 ui_fields['plates']['individual_spread'] = {
     'name': 'Individual Spread?',
     'id': 'individual_spread',

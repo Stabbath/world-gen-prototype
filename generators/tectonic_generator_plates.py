@@ -15,7 +15,6 @@ def randpop(l):
     return value
 
 # TODO - move these variables into the external configurations
-popfunc = randpop
 growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 # TODO - add a config option once plate merging is implemented, as part of plate merging - boolean: start by merging all plates touching each pole and then exclude those plates from any more merges
@@ -27,13 +26,15 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 # TODO - also consider a variant option for the consumer-generator model's smoothing: alternate avg() functions, like doing signed quadratic instead (x^2 but keep sign), or square root actually might be better, to spread height differences faster.
 
 def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound):
-    individual_spread = config['individual_spread']
+    individual_spread = config['plates']['individual_spread']
     plate_count = config['startpoint_count']
-    grid = plate_method(grid, plate_count, individual_spread, func_neighbors)
+    popfunc = randpop if config['plates']['random_pop'] else leftpop
+    
+    grid = plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc)
     
     # === Step 1: Generation of Plates and Faults === 
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
-    plates, faults = detect_plates_and_faults(grid)
+    plates, faults = detect_plates_and_faults(grid, config)
     grid.set_plates_from_lists(plates)
     grid.set_faults_from_lists(faults)
 
@@ -42,15 +43,15 @@ def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound)
         fault.refresh_neighbor_groups() # we need faults to know their neighboring faults if we want to smoothen their gen factors
     
     # === Steps 2 and 3: Assignment of Plate/Fault Properties, and Elevation Map Generation ===
-    # They're intimately connected, even if we can combine them separately. But the properties we assing in Step 2 define the generators we can use in Step 3.
+    # They're intimately connected, even if we can combine them differently; but the properties we assing in Step 2 define the generators we can use in Step 3.
     # So, for now, just keep them merged.
     
-    # GENERATOR/CONSUMER MODEL - for now, can possibly have different models later
+    # GENERATOR/CONSUMER MODEL - for now. We can possibly have different models later
     grid = generator_consumer_model(grid, config, func_neighbors)
     
     return grid
     
-def detect_plates_and_faults(grid):
+def detect_plates_and_faults(grid, config):
     cols = grid.width
     rows = grid.height
     
@@ -91,8 +92,9 @@ def detect_plates_and_faults(grid):
     
     # Step 4: Smoothing
     # Reduce the faults to the bare minimum to separate plates.
-    smooth_faults(fault_tiles, plate_to_cells)
-    plates = list(plate_to_cells.values()) # Update plates to reflect changes
+    if config['plates']['fault_smoothing']:
+        smooth_faults(fault_tiles, plate_to_cells)
+        plates = list(plate_to_cells.values()) # Update plates to reflect changes
 
     # Step 5: Create specific fault lines from the fault tiles.
     # Each sequence of fault tiles between 2 junctions is a fault line. After smoothing, a junction is simply a fault tile with more than 2 fault tile neighbors.
@@ -278,7 +280,7 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
 
     return grid
 
-def plate_method(grid, plate_count, individual_spread, func_neighbors):
+def plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc):
     # Initialize neighbors queues for each plate
     plate_queues = [ deque() for _ in range(plate_count) ]
 

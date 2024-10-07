@@ -7,7 +7,7 @@ from hex_view import HexView
 from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
-from config import default_config, default_config_plates
+from config import default_config, ui_fields as UI_FIELDS
 from config_panel import ConfigPanel
 from view_tabs import TabPanel
 
@@ -91,7 +91,7 @@ def main():
         pan_start_pos = pygame.math.Vector2(0, 0)
         pan_start_offset = pygame.math.Vector2(0, 0)
 
-        config = default_config_plates() # TODO - temp, but plates config has nothing that would tamper with faults method, right now anyway
+        config = default_config() # TODO - temp, but plates config has nothing that would tamper with faults method, right now anyway
 
         # Initial map generation
         hex_grid, hex_views = full_gen(config)
@@ -100,7 +100,14 @@ def main():
 
         font = pygame.font.SysFont('Arial', 18)
 
-        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config)
+        def config_panel_callback(action):
+            nonlocal hex_grid, hex_views
+            if action == 'regen':
+                hex_grid, hex_views = full_gen(config)
+            elif action == 'config_changed':
+                pass # we don't need to do anything, config is changed in place
+
+        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
         tab_panel = TabPanel(VIEW_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING)
 
         # Main view rectangle adjusted to not overlap with tab buttons
@@ -108,18 +115,23 @@ def main():
 
         # Main loop flag
         running = True
-
+        
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-
-                # TODO - refactor event detection so we can just have each component (including an eventual WorldView component which should be extracted from here) have a process_event thrown at it, and we just throw it at each of them in order to see which ones do something
-
-                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    break
+        
+                # Process the event with the config panel first
+                if config_panel.process_event(event):
+                    # If the config panel handled the event, skip further processing
+                    continue
+        
+                # TODO - should clean this up a bit. We should have the view pane in its own class, and then here we would just call "process_event" for each component.
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     # First, check if the click is on any tab button
                     tab_clicked = tab_panel.process_event(event)
-
+        
                     if tab_clicked is not None:
                         current_tab = tab_clicked
                     else:
@@ -135,44 +147,37 @@ def main():
                                 is_panning = True
                                 pan_start_pos = pygame.math.Vector2(event.pos)
                                 pan_start_offset = camera.offset.copy()
-                        else:
-                            # Let the left panel check for its events
-                            action = config_panel.process_event(event)
-                            if action == 'regen':
-                                hex_grid, hex_views = full_gen(config)
-                            elif action == 'config_changed':
-                                pass # we're updating config in-place, so we ignore this
-
+        
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:  # Left mouse button to stop panning
                         is_panning = False
-
+        
                 elif event.type == pygame.MOUSEMOTION:
                     if is_panning:
                         current_pos = pygame.math.Vector2(event.pos)
                         delta = current_pos - pan_start_pos
                         camera.offset = pan_start_offset + delta
-
+        
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
                         # Regenerate the map with current settings
                         hex_grid, hex_views = full_gen(config)
-
+        
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
-
+        
             # Draw left panel
-            config_panel.draw(screen, font)
-
+            config_panel.draw(screen)
+        
             # Draw main view pane background
             pygame.draw.rect(screen, (50, 50, 50), main_view_rect)
-
+        
             # Draw the hex grid within the main view pane
             if current_tab and hex_views.get(current_tab):
                 # Create a surface for the main view
                 main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height))
                 main_view_surface.fill(BACKGROUND_COLOR)  # Background color
-
+        
                 # Adjust camera offset to consider the main view pane position
                 adjusted_camera = Camera(
                     zoom=camera.zoom,
@@ -180,18 +185,18 @@ def main():
                     min_zoom=MIN_ZOOM,
                     max_zoom=MAX_ZOOM
                 )
-
+        
                 hex_views[current_tab].draw(main_view_surface, adjusted_camera)
-
+        
                 # Blit the main view surface onto the screen at the correct position
                 screen.blit(main_view_surface, (PANEL_WIDTH, TABS_HEIGHT))
-
+        
             # Draw tabs on top of the main view
             tab_panel.draw(screen, font, current_tab)
-
+        
             # Update the display
             pygame.display.flip()
-
+        
             # Cap the frame rate at 60 FPS
             clock.tick(FPS)
 
