@@ -22,17 +22,20 @@ def default_config():
         "height": 50
     }
     config['gen_method'] = 'plates'
+    
     config['plates'] = {}
     config['plates']['gen_plate_count'] = 12
     config['plates']['altitude_gen_method'] = 'generator_consumer'
     config['plates']['individual_spread'] = False
     config['plates']['random_pop'] = True
     config['plates']['fault_smoothing'] = True
+    
     config['faults'] = {}
     config['faults']['n_selected_tiles'] = 12
     config['faults']['branching_chance'] = 0.1
     config['faults']['max_branch_depth'] = 2
     config['faults']['stop_on_intersection'] = True
+    
     config['generator_consumer'] = {}
     config['generator_consumer']['max_iter'] = 100
     config['generator_consumer']['max_genfactor'] = 1

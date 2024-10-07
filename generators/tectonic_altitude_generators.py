@@ -22,17 +22,6 @@ def generator_consumer_model(grid, config, func_neighbors):
     for fault in grid.faults:
         generation_factors[fault.id] = gaussian_in_range(min=-1, max=1)
 
-    # Then, if we are using continental vs oceanic plate features, we assign one of those 2 properties to each plate
-    # For every tile in a continental plate, we add the appropriate altitude.
-    # We use a dictionary, external to the Plate class.
-    if plate_continental_factor:
-        plate_is_continental = {}
-        for plate in grid.plates:
-            plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
-            for tile in plate.tiles:
-                alt = tile.get_altitude()
-                tile.set_altitude(alt + plate_continental_factor)
-
     # Then we smooth these factors: we check for each fault its neighboring faults, and the Generation Factor we have for it,
     # and we recalculate them all as a weighted average of their own factor and their neighbors', with their own factor being worth twice as much for the average.
     if SMOOTHEN_GENFACTORS:
@@ -69,6 +58,17 @@ def generator_consumer_model(grid, config, func_neighbors):
             for tile in fault.get_tiles():
                 alt = tile.get_altitude()
                 tile.set_altitude(alt + mass_change)
+
+        # Then, if we are using continental vs oceanic plate features, we assign one of those 2 properties to each plate
+        # For every tile in a continental plate, we add the appropriate altitude.
+        # We use a dictionary, external to the Plate class.
+        if plate_continental_factor:
+            plate_is_continental = {}
+            for plate in grid.plates:
+                plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
+                for tile in plate.tiles:
+                    alt = tile.get_altitude()
+                    tile.set_altitude(alt + plate_continental_factor)
         
         # Step 2: Add a small amount of noise to the entire hex grid
         for tile in grid.get_tiles():
