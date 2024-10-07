@@ -232,7 +232,13 @@ def detect_plates_and_faults(grid, config):
         for tile in fault:
             tile.set_fault_index(i)
 
-    return plates, faults
+    # Step 6: TODO - This needs to be fixed in some future refactor, but for now it is what it is
+    # Plates is a list of sets -> convert to list of lists
+    out_plates = []
+    for plate in plates:
+        out_plates.append(list(plate))
+
+    return out_plates, faults
 
 def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     # Spread colors using BFS for each plate with horizontal wraparound

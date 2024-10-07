@@ -38,6 +38,7 @@ def default_config():
     config['generator_consumer']['max_genfactor'] = 1
     config['generator_consumer']['noise_factor'] = 0.02
     config['generator_consumer']['smoothen_genfactors'] = False
+    config['generator_consumer']['plate_continental_factor'] = 0.1
     return config
 
 # === BASE IDEA (cont.) - UI ===

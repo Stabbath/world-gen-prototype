@@ -9,17 +9,29 @@ def generator_consumer_model(grid, config, func_neighbors):
     # And for the same properties, there may be different altitude generation methods.
     # For now, just assuming my initial method. Later, we'll need to possibly restructure/extract things to make it more flexible, with different combinations of Property Assignment and Altitude Map Generation
 
+    MAX_ALTITUDE=config['max_altitude']
     MAX_ITER = config['generator_consumer']['max_iter']
     MAXGENFACTOR = config['generator_consumer']['max_genfactor']
     NOISE_FACTOR = config['generator_consumer']['noise_factor']
     SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
-    MAX_ALTITUDE=config['max_altitude']
+    plate_continental_factor = config['generator_consumer']['plate_continental_factor']
 
     # First, we assign to each fault a float between 1 and -1, completely at random. This is its Generation Factor. If negative, it means it consumes mass. If positive, it generates it.
     # We use a dictionary, external to the Fault class.
     generation_factors = {}
     for fault in grid.faults:
         generation_factors[fault.id] = gaussian_in_range(min=-1, max=1)
+
+    # Then, if we are using continental vs oceanic plate features, we assign one of those 2 properties to each plate
+    # For every tile in a continental plate, we add the appropriate altitude.
+    # We use a dictionary, external to the Plate class.
+    if plate_continental_factor:
+        plate_is_continental = {}
+        for plate in grid.plates:
+            plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
+            for tile in plate.tiles:
+                alt = tile.get_altitude()
+                tile.set_altitude(alt + plate_continental_factor)
 
     # Then we smooth these factors: we check for each fault its neighboring faults, and the Generation Factor we have for it,
     # and we recalculate them all as a weighted average of their own factor and their neighbors', with their own factor being worth twice as much for the average.

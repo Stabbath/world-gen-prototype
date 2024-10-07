@@ -2,7 +2,8 @@ from functools import total_ordering
 
 # TODO Plate and Fault should be moved to a separate file, as the HexGrid should be independent from the Tectonic Method.
 class Plate:
-    def __init__(self, tiles):
+    def __init__(self, plate_index, tiles):
+        self.id = plate_index
         self.tiles = tiles
         
     def set_tiles(self, tiles):
@@ -128,7 +129,7 @@ class HexGrid:
     def set_plates_from_lists(self, plates):
         self.plates = []
         for plate in plates:
-            self.plates.append(Plate(plate));
+            self.plates.append(Plate(plate[0].get_plate_index(), plate));
 
     def set_faults_from_lists(self, faults):
         self.faults = []
