@@ -26,17 +26,16 @@ ADJACENT_DIRECTIONS = {
     'SW': ['S', 'SW', 'NW'],
     'NW': ['SW', 'NW', 'N']
 }
-BRANCHING_CHANCE = 0.1
-MAX_BRANCH_DEPTH = 2
-STOP_ON_INTERSECTION = True  # As in original code
 
-def generate_world_faults(hex_grid, n_selected=12):
+def generate_world_faults(hex_grid, config, func_neighbors):
+    n_selected = config['faults']['n_selected_tiles']
+
     # Select boundary tiles
     selected_tiles = select_distributed_boundary_tiles(hex_grid, n_selected)
     print(f"Selected {n_selected} boundary tiles for line generation.")
 
     # Generate lines
-    generate_lines_in_directions(hex_grid, selected_tiles)
+    generate_lines_in_directions(hex_grid, config, selected_tiles)
     print("Generated lines from boundary tiles.")
 
     # Label continents
@@ -135,7 +134,9 @@ def get_weighted_initial_directions(hex_grid, tile):
     weighted_directions = list(direction_weights.items())
     return weighted_directions
 
-def generate_lines_in_directions(hex_grid, selected_tiles):
+def generate_lines_in_directions(hex_grid, config, selected_tiles):
+    MAX_BRANCH_DEPTH = config['faults']['max_branch_depth']
+
     for tile in selected_tiles:
         # Get weighted possible initial directions based on tile position
         weighted_directions = get_weighted_initial_directions(hex_grid, tile)
@@ -144,11 +145,11 @@ def generate_lines_in_directions(hex_grid, selected_tiles):
             directions, weights = zip(*weighted_directions)
             initial_direction = random.choices(directions, weights=weights)[0]
             print(f"Generating line from Tile ({tile.col}, {tile.row}) towards {initial_direction}")
-            generate_line(hex_grid, tile, initial_direction, initial_direction, MAX_BRANCH_DEPTH)
+            generate_line(hex_grid, config, tile, initial_direction, initial_direction, MAX_BRANCH_DEPTH)
         else:
             print(f"No possible initial directions for Tile ({tile.col}, {tile.row})")
 
-def generate_line(hex_grid, start_tile, direction, initial_direction, branch_depth):
+def generate_line(hex_grid, config, start_tile, direction, initial_direction, branch_depth):
     """
     Generate a line from the start_tile, moving randomly without sharp turns,
     preferring to continue towards the initial direction. Allows for branching.
@@ -159,6 +160,9 @@ def generate_line(hex_grid, start_tile, direction, initial_direction, branch_dep
     :param initial_direction: The initial preferred direction
     :param branch_depth: Remaining branching depth
     """
+    BRANCHING_CHANCE = config['faults']['branching_chance']
+    STOP_ON_INTERSECTION = config['faults']['stop_on_intersection']
+
     current_tile = start_tile
     current_direction = direction
     visited_tiles = set()
@@ -186,7 +190,7 @@ def generate_line(hex_grid, start_tile, direction, initial_direction, branch_dep
                     if branch_directions:
                         branch_direction = random.choice(branch_directions)
                         print(f"Branching from Tile ({next_tile.col}, {next_tile.row}) towards {branch_direction}")
-                        generate_line(hex_grid, next_tile, branch_direction, initial_direction, branch_depth - 1)
+                        generate_line(hex_grid, config, next_tile, branch_direction, initial_direction, branch_depth - 1)
 
                 # Decide the next direction, favoring the initial direction
                 allowed_directions = ADJACENT_DIRECTIONS[current_direction]

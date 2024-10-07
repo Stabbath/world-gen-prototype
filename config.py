@@ -5,16 +5,6 @@ from generators.tectonic_generator_plates import generate_world_plates
 # "config" will list the customizable options for generation, e.g. number of plates or lines, the data type and acceptable range
 # this will inform the UI for world gen, and will be how the generation functions process these settings
 
-# Initial Grid settings
-INITIAL_GRID_COLS = 50  # Increased grid size for better visual effect
-INITIAL_GRID_ROWS = 50  # Increased grid size for better visual effect
-
-# Number of tiles to select for fault generation
-INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
-
-MAX_ALTITUDE = 20000
-SEA_LEVEL = 10000
-
 
 # === BASE IDEA ===
 # We store default values for configurable settings here.
@@ -26,19 +16,23 @@ SEA_LEVEL = 10000
 
 def default_config():
     config = {
-        "max_altitude": MAX_ALTITUDE,
-        "sea_level": SEA_LEVEL,
-        "width": INITIAL_GRID_COLS,
-        "height": INITIAL_GRID_ROWS,
-        "startpoint_count": INITIAL_N_SELECTED_TILES # TODO - this should be only for faults and plates methods, not generic
+        "max_altitude": 20000,
+        "sea_level": 10000,
+        "width": 50,
+        "height": 50
     }
     config['gen_method'] = 'plates'
     config['plates'] = {}
+    config['plates']['gen_plate_count'] = 12
     config['plates']['altitude_gen_method'] = 'generator_consumer'
     config['plates']['individual_spread'] = False
     config['plates']['random_pop'] = True
     config['plates']['fault_smoothing'] = True
     config['faults'] = {}
+    config['faults']['n_selected_tiles'] = 12
+    config['faults']['branching_chance'] = 0.1
+    config['faults']['max_branch_depth'] = 2
+    config['faults']['stop_on_intersection'] = True
     config['generator_consumer'] = {}
     config['generator_consumer']['max_iter'] = 100
     config['generator_consumer']['max_genfactor'] = 1

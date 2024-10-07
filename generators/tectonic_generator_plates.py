@@ -27,7 +27,7 @@ growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
 def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound):
     individual_spread = config['plates']['individual_spread']
-    plate_count = config['startpoint_count']
+    plate_count = config['plates']['gen_plate_count']
     popfunc = randpop if config['plates']['random_pop'] else leftpop
     
     grid = plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc)

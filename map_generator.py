@@ -10,7 +10,7 @@ def generate_map(config, func_neighbors=get_neighbors_wraparound):
     gen_method = config['gen_method']
     hex_grid = HexGrid(width=cols, height=rows, func_neighbors=func_neighbors)
     if gen_method == 'faults':
-        hex_grid = generate_world_faults(hex_grid, n_selected=config['startpoint_count'])
+        hex_grid = generate_world_faults(hex_grid, config, func_neighbors=func_neighbors)
         print("Generated world using fault-based method.")
     else:
         hex_grid = generate_world_plates(hex_grid, config, func_neighbors=func_neighbors)
