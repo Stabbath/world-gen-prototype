@@ -8,6 +8,12 @@ class Plate:
         
     def set_tiles(self, tiles):
         self.tiles = tiles
+        
+    def borders_pole(self):
+        for tile in self.tiles:
+            if tile.is_polar():
+                return True
+        return False
     
 class Fault:
     def __init__(self, fault_index, tiles):
@@ -58,6 +64,11 @@ class HexTile:
         self.altitude = 0
         # TODO - review continent label and is_line; also is_selected. Things that are just used during gen should probably be kept in an external dictionary/array rather than on the tile
         # TODO - same goes for plate index and fault index
+
+    def is_polar(self):
+        neighbors = self.get_neighbors()
+        print('polar tile')
+        return len(neighbors) < 6
 
     def get_altitude(self):
         return self.altitude

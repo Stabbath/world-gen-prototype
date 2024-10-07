@@ -16,6 +16,32 @@ def generator_consumer_model(grid, config, func_neighbors):
     SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
     plate_continental_factor = config['generator_consumer']['plate_continental_factor']
 
+    # Step 2.1 - Plate Properties
+    plate_is_continental = {}
+    for plate in grid.plates:
+        plate_is_continental[plate.id] = False # init
+
+    unassigned_plates = list(grid.plates)
+    continentals_assigned = 0
+    
+    if config['generator_consumer']['polar_plates_are_oceanic']: 
+        # make it so polar plates cannot be assigned
+        for plate in grid.plates:
+            if plate.borders_pole():
+                unassigned_plates.remove(plate)
+    
+    while continentals_assigned < config['generator_consumer']['continental_plates_count'] and len(unassigned_plates) > 0:
+        plate = random.choice(unassigned_plates)
+        plate_is_continental[plate.id] = True
+        continentals_assigned += 1
+        unassigned_plates.remove(plate)
+    
+    # # 50/50 init
+    # for plate in grid.plates:
+    #     plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
+
+
+    # Step 2.2 - Fault Properties
     # First, we assign to each fault a float between 1 and -1, completely at random. This is its Generation Factor. If negative, it means it consumes mass. If positive, it generates it.
     # We use a dictionary, external to the Fault class.
     generation_factors = {}
@@ -40,10 +66,10 @@ def generator_consumer_model(grid, config, func_neighbors):
     factor_values = generation_factors.values()
     min_factor = min(factor_values)
     max_factor = max(factor_values)
-
     for fault_id, factor in generation_factors.items():
         normalized_factor = -1 + 2 * (factor - min_factor) / (max_factor - min_factor)
         generation_factors[fault_id] = normalized_factor
+
     
     # === Step 3: Altitude Map Generation ===
     # Each iteration has the following steps: 
@@ -63,12 +89,11 @@ def generator_consumer_model(grid, config, func_neighbors):
         # For every tile in a continental plate, we add the appropriate altitude.
         # We use a dictionary, external to the Plate class.
         if plate_continental_factor:
-            plate_is_continental = {}
             for plate in grid.plates:
-                plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
-                for tile in plate.tiles:
-                    alt = tile.get_altitude()
-                    tile.set_altitude(alt + plate_continental_factor)
+                if plate_is_continental[plate.id]:
+                    for tile in plate.tiles:
+                        alt = tile.get_altitude()
+                        tile.set_altitude(alt + plate_continental_factor)
         
         # Step 2: Add a small amount of noise to the entire hex grid
         for tile in grid.get_tiles():
