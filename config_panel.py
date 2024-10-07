@@ -40,7 +40,11 @@ class ConfigPanel:
         if self.regenerate_button_rect.collidepoint(event.pos):
             return 'regen'
         elif self.gen_method_button_rect.collidepoint(event.pos):
-            self.config['gen_method'] = 1 - self.config['gen_method']
+            # TODO - this needs to be converted whe we change it to a select
+            if self.config['gen_method'] == 'plates':
+                self.config['gen_method'] = 'faults'
+            else: 
+                self.config['gen_method'] = 'plates'
             return 'config_changed'
         elif self.n_selected_increase_rect.collidepoint(event.pos):
             self.config['startpoint_count'] += 1
@@ -96,7 +100,7 @@ class ConfigPanel:
         # Draw generation method label and button
         gen_method_label = font.render("Generation Method:", True, (255, 255, 255))
         screen.blit(gen_method_label, self.gen_method_label_rect.topleft)
-        gen_method_text = "Plate Tectonics" if self.config['gen_method'] == 1 else "Fault Lines"
+        gen_method_text = self.config['gen_method']
         pygame.draw.rect(screen, (70, 70, 70), self.gen_method_button_rect)
         method_text = font.render(gen_method_text, True, (255, 255, 255))
         method_text_rect = method_text.get_rect(center=self.gen_method_button_rect.center)

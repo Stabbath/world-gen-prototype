@@ -39,7 +39,7 @@ def default_config():
 
 def default_config_plates():
     config = default_config()
-    config['gen_method'] = 1
+    config['gen_method'] = 'plates'
     # config['altitude_gen_method'] = 'generator_consumer' # TODO
     config['individual_spread'] = False
     config['random_pop'] = True
