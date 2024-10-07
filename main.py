@@ -8,7 +8,8 @@ from hex_view_colors import color_plates, color_altitude, color_hydro, color_fau
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
 from config import default_config, ui_fields as UI_FIELDS
-from config_panel import ConfigPanel
+#from config_panel import ConfigPanel
+from config_filer import update_config_from_file, config_to_file
 from view_tabs import TabPanel
 
 # ------------------------------
@@ -22,7 +23,7 @@ BACKGROUND_COLOR = (0, 0, 0)  # Black background
 FPS = 60  # Cap the frame rate at 60 FPS
 
 # Panel settings
-PANEL_WIDTH = 200  # Width of the left-side panel
+PANEL_WIDTH = 0  # Width of the left-side panel
 TAB_BUTTON_WIDTH = 100
 TAB_BUTTON_HEIGHT = 30
 TAB_BUTTON_PADDING = 10
@@ -44,6 +45,9 @@ MAX_ZOOM = 3.0   # Maximum zoom level
 VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro"]
 
 def full_gen(config):
+    # NOTE - this is kind of a bandaid to simplify logic.
+    # The UI was a pain in the ass, so now we read and re-read the config from a json file whenever we want to generate a map
+    update_config_from_file(config)
     hex_grid = gen_world(config)
     hex_views = gen_views(config, hex_grid)
     return hex_grid, hex_views
@@ -92,6 +96,10 @@ def main():
         pan_start_offset = pygame.math.Vector2(0, 0)
 
         config = default_config() # TODO - temp, but plates config has nothing that would tamper with faults method, right now anyway
+        
+        # NOTE - this is for our bandaid config input solution
+        # it just makes sure that the file's starting settings are always the same as we've set them in our default_config in code
+        config_to_file(config)
 
         # Initial map generation
         hex_grid, hex_views = full_gen(config)
@@ -107,7 +115,7 @@ def main():
             elif action == 'config_changed':
                 pass # we don't need to do anything, config is changed in place
 
-        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
+#        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
         tab_panel = TabPanel(VIEW_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING)
 
         # Main view rectangle adjusted to not overlap with tab buttons
@@ -122,10 +130,10 @@ def main():
                     running = False
                     break
         
-                # Process the event with the config panel first
-                if config_panel.process_event(event):
-                    # If the config panel handled the event, skip further processing
-                    continue
+                # # Process the event with the config panel first
+                # if config_panel.process_event(event):
+                #     # If the config panel handled the event, skip further processing
+                #     continue
         
                 # TODO - should clean this up a bit. We should have the view pane in its own class, and then here we would just call "process_event" for each component.
                 if event.type == pygame.MOUSEBUTTONDOWN:
@@ -166,8 +174,8 @@ def main():
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
         
-            # Draw left panel
-            config_panel.draw(screen)
+            # # Draw left panel
+            # config_panel.draw(screen)
         
             # Draw main view pane background
             pygame.draw.rect(screen, (50, 50, 50), main_view_rect)
