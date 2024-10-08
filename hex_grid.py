@@ -2,8 +2,10 @@ from functools import total_ordering
 
 # TODO Plate and Fault should be moved to a separate file, as the HexGrid should be independent from the Tectonic Method.
 class Plate:
-    def __init__(self, plate_index, tiles):
+    def __init__(self, grid, plate_index, tiles):
+        self.grid = grid
         self.id = plate_index
+        self.plate_index = plate_index
         self.tiles = tiles
         
     def set_tiles(self, tiles):
@@ -14,9 +16,42 @@ class Plate:
             if tile.is_polar():
                 return True
         return False
+
+    def refresh_neighbor_groups(self):
+        # by definition, a plate tile can only have neighbors of its own tile or of a fault;
+        # so we process faults
+        faults = {}
+        for tile in self.tiles:
+            tile_neighbors = tile.get_neighbors()
+            
+            for tn in tile_neighbors:
+                tnFaultIdx = tn.get_fault_index()
+                if tnFaultIdx is not None:
+                    faults[tnFaultIdx] = True
+        self.fault_neighbor_indices = list(faults)
+        
+        # then, we consider neighbor plates of our neighbor faults to be our neighbor plates
+        plates = {}
+        for faultIndex in self.fault_neighbor_indices:
+            fault = self.grid.get_fault_by_index(faultIndex)
+            neighbor_indices = fault.get_plate_neighbor_indices()
+            for neighbor_index in neighbor_indices:
+                if neighbor_index != self.plate_index:
+                    plates[neighbor_index] = True
+        self.plate_neighbor_indices = list(plates)
+
+    def get_plate_neighbor_indices(self):
+        return self.plate_neighbor_indices
+
+    def get_plate_neighbors(self):
+        neighbors = []
+        for neighbor_index in self.plate_neighbor_indices:
+            neighbors.append(self.grid.get_plate_by_index(neighbor_index))
+        return neighbors
     
 class Fault:
-    def __init__(self, fault_index, tiles):
+    def __init__(self, grid, fault_index, tiles):
+        self.grid = grid
         self.id = fault_index
         self.fault_index = fault_index
         self.tiles = tiles
@@ -67,7 +102,6 @@ class HexTile:
 
     def is_polar(self):
         neighbors = self.get_neighbors()
-        print('polar tile')
         return len(neighbors) < 6
 
     def get_altitude(self):
@@ -140,9 +174,21 @@ class HexGrid:
     def set_plates_from_lists(self, plates):
         self.plates = []
         for plate in plates:
-            self.plates.append(Plate(plate[0].get_plate_index(), plate));
+            self.plates.append(Plate(self, plate[0].get_plate_index(), plate));
 
     def set_faults_from_lists(self, faults):
         self.faults = []
         for fault in faults:
-            self.faults.append(Fault(fault[0].get_fault_index(), fault)); # TODO - kind of hacky, clean it up later
+            self.faults.append(Fault(self, fault[0].get_fault_index(), fault)); # TODO - kind of hacky, clean it up later
+
+    def get_fault_by_index(self, fault_index):
+        for fault in self.faults:
+            if fault.fault_index == fault_index:
+                return fault
+        return None
+    
+    def get_plate_by_index(self, plate_index):
+        for plate in self.plates:
+            if plate.plate_index == plate_index:
+                return plate
+        return None

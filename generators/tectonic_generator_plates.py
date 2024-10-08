@@ -17,10 +17,7 @@ def randpop(l):
 # TODO - move these variables into the external configurations
 growth_scales = None  # [1.0] * 8 + [0.5] * 4
 
-# TODO - add a config option once plate merging is implemented, as part of plate merging - boolean: start by merging all plates touching each pole and then exclude those plates from any more merges
-
 # TODO - add a config option to tectonic method: turn non-wraparound edges into faults with -1 GenFactor. To force oceans at the poles.
-# TODO - add a config option to tectonic method: plate properties: continental or oceanic. A continental plate gets an initial boost to its altitude to every tile. An oceanic one gets a symmetric decrease.
 # ^ note i already have a similar concept written down somewhere else
 
 # TODO - also consider a variant option for the consumer-generator model's smoothing: alternate avg() functions, like doing signed quadratic instead (x^2 but keep sign), or square root actually might be better, to spread height differences faster.
@@ -41,7 +38,18 @@ def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound)
     # TODO - this feels dirty just throwing it on here like this, maybe clean it up later
     for fault in grid.faults:
         fault.refresh_neighbor_groups() # we need faults to know their neighboring faults if we want to smoothen their gen factors
-    
+    for plate in grid.plates: # note that we need to process fault neighbors before plate neighbors for it to work, with current implementation of these refresh methods
+        plate.refresh_neighbor_groups() # we need plates to know their neighboring faults if we want grouped continents
+
+    #  TODO - implement this maybe?
+    # config['plates']['merge_plates_count'] = 12
+    # if config['plates']['merge_plates_mode']:
+    #     if config['plates']['merge_polar_plates_first']:
+    #         # TODO - merge polar plates
+    #         pass
+    #     # TODO - then merge random plates with their neighbors until we reach the goal
+    #     pass
+        
     # === Steps 2 and 3: Assignment of Plate/Fault Properties, and Elevation Map Generation ===
     # They're intimately connected, even if we can combine them differently; but the properties we assing in Step 2 define the generators we can use in Step 3.
     # So, for now, just keep them merged.

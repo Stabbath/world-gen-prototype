@@ -18,17 +18,17 @@ def default_config():
     config = {
         "max_altitude": 20000,
         "sea_level": 10000,
-        "width": 100,
-        "height": 80
+        "width": 150,
+        "height": 120
     }
     config['gen_method'] = 'plates'
     
     config['plates'] = {}
-    config['plates']['gen_plate_count'] = 36
+    config['plates']['gen_plate_count'] = 66
     config['plates']['altitude_gen_method'] = 'generator_consumer'
     config['plates']['individual_spread'] = True
     config['plates']['random_pop'] = False
-    config['plates']['fault_smoothing'] = False
+    config['plates']['fault_smoothing'] = True
     
     config['faults'] = {}
     config['faults']['n_selected_tiles'] = 24
@@ -37,13 +37,14 @@ def default_config():
     config['faults']['stop_on_intersection'] = True
     
     config['generator_consumer'] = {}
-    config['generator_consumer']['max_iter'] = 100
+    config['generator_consumer']['max_iter'] = 50
     config['generator_consumer']['max_genfactor'] = 1
     config['generator_consumer']['plate_continental_factor'] = 0.1
-    config['generator_consumer']['noise_factor'] = 0.05
+    config['generator_consumer']['noise_factor'] = 0.1
     config['generator_consumer']['smoothen_genfactors'] = False
     config['generator_consumer']['polar_plates_are_oceanic'] = True
-    config['generator_consumer']['continental_plates_count'] = 15
+    config['generator_consumer']['continental_plates_count'] = 22
+    config['generator_consumer']['continents_count'] = 2
     return config
 
 # === BASE IDEA (cont.) - UI ===

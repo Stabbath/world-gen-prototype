@@ -15,6 +15,7 @@ def generator_consumer_model(grid, config, func_neighbors):
     NOISE_FACTOR = config['generator_consumer']['noise_factor']
     SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
     plate_continental_factor = config['generator_consumer']['plate_continental_factor']
+    continental_plates_count = config['generator_consumer']['continental_plates_count']
 
     # Step 2.1 - Plate Properties
     plate_is_continental = {}
@@ -29,16 +30,73 @@ def generator_consumer_model(grid, config, func_neighbors):
         for plate in grid.plates:
             if plate.borders_pole():
                 unassigned_plates.remove(plate)
-    
-    while continentals_assigned < config['generator_consumer']['continental_plates_count'] and len(unassigned_plates) > 0:
-        plate = random.choice(unassigned_plates)
-        plate_is_continental[plate.id] = True
-        continentals_assigned += 1
-        unassigned_plates.remove(plate)
-    
-    # # 50/50 init
-    # for plate in grid.plates:
-    #     plate_is_continental[plate.id] = bool(random.getrandbits(1)) # 50/50 for now
+
+    if config['generator_consumer']['continents_count']:
+        # Different method of assignment: instead of random, we take a beginning number of starting continental plates, and only assign the continental property to their neighbors (or the neighbors of their neighbors etc)
+        num_continents = config['generator_consumer']['continents_count']
+        plate_index_to_continent_index = {}
+        
+        # Ensure we don't assign more continents than available plates
+        num_continents = min(num_continents, continental_plates_count, len(unassigned_plates))
+        continents_plates = []
+        
+        # Select starting plates for each continent
+        starting_plates = random.sample(unassigned_plates, num_continents)
+        plate_neighbors_of_continent = []
+        for i, start_plate in enumerate(starting_plates):
+            # Assign the starting plate as continental
+            plate_is_continental[start_plate.id] = True
+            continentals_assigned += 1
+            unassigned_plates.remove(start_plate)
+            continents_plates.append([start_plate])
+            plate_neighbors_of_continent.append(start_plate.get_plate_neighbors())  # Change here: directly append neighbors
+            plate_index_to_continent_index[start_plate.plate_index] = i
+        
+        
+        def is_valid_neighbor(neighbor_plate, continent_index, plate_index_to_continent_index, unassigned_plates):
+            # if it's already been assigned, it's not valid
+            if neighbor_plate not in unassigned_plates:
+                return False
+            # if neighbor_plate.plate_index in plate_index_to_continent_index:
+            #     return False
+            # if the neighbor_plate has a neighbor whose continent is different than this one, also not valid
+            neighbors_of_neighbor = neighbor_plate.get_plate_neighbors()
+            for non in neighbors_of_neighbor:
+                noni = non.plate_index
+                if noni in plate_index_to_continent_index and plate_index_to_continent_index[noni] != continent_index:
+                    return False
+            # else valid
+            return True
+        
+        # Then, continents take turns expanding into their neighboring plates until we reach one of our limits or they all fail to expand
+        could_expand = True
+        while len(unassigned_plates) > 0 and continentals_assigned < continental_plates_count and could_expand:
+            could_expand = False
+            for continent_index in range(num_continents):
+                if len(plate_neighbors_of_continent[continent_index]) > 0:
+                    # pop a neighbor, see if it's valid
+                    neighbor_plate = plate_neighbors_of_continent[continent_index].pop()
+                    while not is_valid_neighbor(neighbor_plate, continent_index, plate_index_to_continent_index, unassigned_plates):
+                        if len(plate_neighbors_of_continent[continent_index]) == 0:
+                            break  # break forcefully if we run out of options
+                        neighbor_plate = plate_neighbors_of_continent[continent_index].pop()  # try again
+                    else:  # after we get a valid one
+                        # assign it etc
+                        plate_is_continental[neighbor_plate.id] = True
+                        continentals_assigned += 1
+                        unassigned_plates.remove(neighbor_plate)
+                        continents_plates[continent_index].append(neighbor_plate)
+                        plate_neighbors_of_continent[continent_index].extend(neighbor_plate.get_plate_neighbors())
+                        plate_index_to_continent_index[neighbor_plate.plate_index] = continent_index
+                        could_expand = True
+    else:
+        # Random continental plate assignment
+        while continentals_assigned < continental_plates_count and len(unassigned_plates) > 0:
+            plate = random.choice(unassigned_plates)
+            plate_is_continental[plate.id] = True
+            continentals_assigned += 1
+            unassigned_plates.remove(plate)
+
 
 
     # Step 2.2 - Fault Properties
