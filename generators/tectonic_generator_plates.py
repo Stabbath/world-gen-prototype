@@ -4,6 +4,7 @@ from collections import deque, defaultdict
 from neighbor_functions import get_neighbors_wraparound
 from generators.tectonic_fault_smoothing import smooth_faults
 from generators.tectonic_altitude_generators import generator_consumer_model
+from hex_grid import Plate
 
 def leftpop(l):
     return l.popleft()
@@ -27,8 +28,8 @@ def generate_world_plates(grid, config, func_neighbors=get_neighbors_wraparound)
     plate_count = config['plates']['gen_plate_count']
     popfunc = randpop if config['plates']['random_pop'] else leftpop
     
-    grid = plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc)
-    
+    grid = plate_method(grid, config, plate_count, individual_spread, func_neighbors, popfunc)
+        
     # === Step 1: Generation of Plates and Faults === 
     # TODO - if we need optimization later, detection should be made a part of the plate_method. 
     plates, faults = detect_plates_and_faults(grid, config)
@@ -248,9 +249,10 @@ def detect_plates_and_faults(grid, config):
 
     return out_plates, faults
 
-def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
+def spread_generic(grid, config, plate_queues, neighborsfunc, popfunc, individual_spread=True, growth_scales=None):
     # Spread colors using BFS for each plate with horizontal wraparound
     plates_active = len(plate_queues)  # Number of plates still spreading
+    plates_list = [[] for q in plate_queues]
 
     while plates_active > 0:
         for plate_index in range(len(plate_queues)):
@@ -270,6 +272,7 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
                 # If not colored yet, assign the plate's color to the cell
                 if tile.get_plate_index() is None:
                     tile.set_plate_index(plate_index)
+                    plates_list[plate_index].append(tile)
 
                     # Get its neighbors, add them to the queue
                     for neighbor in tile.get_neighbors():
@@ -283,6 +286,7 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
                     # If not assigned yet, assign
                     if tile.get_plate_index() is None:
                         tile.set_plate_index(plate_index)
+                        plates_list[plate_index].append(tile)
 
                         # Get its neighbors, add them to the queue
                         for neighbor in tile.get_neighbors():
@@ -292,9 +296,63 @@ def spread_generic(grid, plate_queues, neighborsfunc, popfunc, individual_spread
             if not plate_queues[plate_index]:
                 plates_active -= 1
 
+    # TODO - could save plates_list in the hex grid plates already, and then just update it when we merge here, or when we create the faults outside.
+    
+    
+    def get_plate_neighbor_indices(plate, plate_index):
+        neighbor_indices = set()
+        for tile in plate:
+            nts = tile.get_neighbors()
+            for nt in nts:
+                index = nt.get_plate_index()
+                neighbor_indices.add(index)
+        neighbor_indices.remove(plate_index)
+        return list(neighbor_indices)
+    
+    # === Merge plates === #
+    print("Merging plates...")
+    merge_plates_count = config['plates']['merge_plates_count']
+    plate_index_to_new_plate_index = {}
+    if merge_plates_count:
+        plates_count = len(plates_list)
+        unmerged_plate_indices = set([i for i, _ in enumerate(plates_list)])
+        if merge_plates_count >= plates_count:
+            merge_plates_count = plates_count - 1 # don't try to merge down to less than 1 plate
+
+        # then iterate and link plates through plate_index_to_new_plate_index
+        count = 0
+        for plate_index, plate in enumerate(list(plates_list)):
+            if count == merge_plates_count: # upper limit
+                break
+        
+            if plate_index not in unmerged_plate_indices: # don't process indices that have been merged already, to reduce probability of mega plates. More importantly, with the current implementation, it would also lead to the possibility of 2 plates being assigned to each other and causing an infinite lookup loop during actual assignment
+                continue
+            
+            neighbor_plate_indices = get_plate_neighbor_indices(plate, plate_index)
+            other_plate_index = random.choice(neighbor_plate_indices)
+
+            # calculate the final index from the dictionary. Basically, do recursive lookups until we reach an index that isn't on the dict
+            new_index = other_plate_index
+            if new_index in plate_index_to_new_plate_index:
+                new_index = plate_index_to_new_plate_index[new_index]
+            plate_index_to_new_plate_index[plate_index] = new_index
+            
+            unmerged_plate_indices.discard(plate_index)
+            count += 1
+        
+        # finally, do the actual merging
+        merged_count = 0
+        for plate_index in range(plates_count):
+            # if it needs to be reassigned, then assign
+            if plate_index in plate_index_to_new_plate_index:
+                merged_count += 1
+                for tile in plates_list[plate_index]:
+                    tile.set_plate_index(plate_index_to_new_plate_index[plate_index])
+        print('Merged', merged_count, 'plates.')
+
     return grid
 
-def plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc):
+def plate_method(grid, config, plate_count, individual_spread, func_neighbors, popfunc):
     # Initialize neighbors queues for each plate
     plate_queues = [ deque() for _ in range(plate_count) ]
 
@@ -310,7 +368,4 @@ def plate_method(grid, plate_count, individual_spread, func_neighbors, popfunc):
             if tile.get_plate_index() is None:
                 plate_queues[i].append(tile)
                 break  # Ensure unique initial seeds
-    return spread_generic(grid, plate_queues, func_neighbors, popfunc, individual_spread, growth_scales)
-        # TODO - an idea for another mode - generate extra plates, then merge some of them at random until we're down to the desired number
-        # TODO - another idea: as something of a replacement for scale: breakout plates. Create small plates expanding outward from some fault line into other plates. To simulate things like Juan de Fuca.
-        
+    return spread_generic(grid, config, plate_queues, func_neighbors, popfunc, individual_spread, growth_scales)        
