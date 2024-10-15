@@ -447,13 +447,14 @@ def all_wind(grid, config, state, prev_state):
         geostrophic_wind = (pressure_gradient[0] * k, pressure_gradient[1] * k) 
         
         state[tile.id]['wind'] = geostrophic_wind
-        
+        magnitude = math.sqrt(geostrophic_wind[0] ** 2 + geostrophic_wind[1] ** 2)
+
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
         (neighbor1, ratio1), (neighbor2, ratio2) = vector_to_flat_hex_neighbors_and_ratio
-        state[tile.id]['wind1'] = [geostrophic_wind[0] * ratio1, geostrophic_wind[1] * ratio1]
+        state[tile.id]['wind1'] = magnitude * ratio1
         state[tile.id]['wind1_neighbor'] = neighbor1
         if (neighbor2): # it's possible to point straight to the center and therefore have only one downwind neighbor here
-            state[tile.id]['wind2'] = [geostrophic_wind[0] * ratio2, geostrophic_wind[1] * ratio2]
+            state[tile.id]['wind2'] = magnitude * ratio2
             state[tile.id]['wind2_neighbor'] = neighbor2
         
         # winds are slowed down by friction
@@ -465,30 +466,59 @@ def all_wind(grid, config, state, prev_state):
         # but forests also have an effect, so let's look at biomass on this tile
         friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass']) * 0.0005 # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
         # and we apply the friction
-        state[tile.id]['wind1'][0] *= (1.0 - friction)
-        state[tile.id]['wind1'][1] *= (1.0 - friction)
+        state[tile.id]['wind1'] *= (1.0 - friction)
         if 'wind2' in state[tile.id]:
             friction = 0.0
             friction += (neighbor2.altitude - tile.altitude) * 0.0005
             friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass']) * 0.0005 # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
-            state[tile.id]['wind2'][0] *= (1.0 - friction)
-            state[tile.id]['wind2'][1] *= (1.0 - friction)
+            state[tile.id]['wind2'] *= (1.0 - friction)
 
 def distribution_wind(grid, config, state, prev_state):
     # queue = every tile on the map, sorted by air pressure (lowest first)
-    # iteratively:
-        # pop queue
-        # 
-    pass
+    # variables to use:
+    # state[tile.id]['wind1'] and state[tile.id]['wind2'] - the wind strength outwards from a tile (second one may not exist)
+    # state[tile.id]['wind1_neighbor'] and state[tile.id]['wind2_neighbor'] - the neighbors the winds are flowing into
+    # state[tile.id]['temperature'] - one of the variables to distribute
+    # state[tile.id]['air_pressure'] - one of the variables to distribute
+    # state[tile.id]['vapor_content'] - one of the variables to distribute
+    # state[tile.id]['cloud_density'] - one of the variables to distribute
 
-def distribuiton_water_flow(grid, config, state, prev_state):
-    # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
     # iteratively:
         # pop queue
-        # get local precipitation, adjust cloud density, add to water_flow on this tile
-        # find gradients to each neighbor
+        # ???
+        # profit
+    pass # TODO
+
+def distribution_water_flow(grid, config, state, prev_state):
+    # calculate every tile's precipitation and initial water flow
+    for tile in grid.tiles:
+        # get local precipitation
+        state[tile.id]['precipitation'] = calculate_precipitation(
+            config,
+            state[tile.id]['vapor_content'],
+            state[tile.id]['vapor_capacity'],
+            state[tile.id]['cloud_density']
+        )
+
+        # adjust cloud density and vapor content based on how much it rained
+        # maybe temperature too?
+        # and of course, adjust water flow. Note that sea tiles will have max water flow automatically
+        pass # TODO
+        
+    # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
+    queue = sorted([tile for tile in grid.tiles if tile.altitude > config["sea_level"]], key=lambda tile: tile.altitude, reverse=True)
+    while queue:
+        tile = queue.pop(0)
+
+        # find altitude gradients to each neighbor
+        gradients = []
+        for neighbor in tile.get_neighbors():
+            if neighbor.altitude < tile.altitude: # water only flows to lower tiles
+                gradients.append((neighbor, neighbor.altitude - tile.altitude))
+
         # divide local water_flow between neighbors, weighted by the gradient (bigger change in altitude = more water flowing towards it)
-    pass
+        for neighbor, gradient in gradients:
+            state[neighbor.id]['water_flow'] += state[tile.id]['water_flow'] * gradient
 
 
 # === MAIN FUNCTIONS ===
