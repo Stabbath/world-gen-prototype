@@ -21,7 +21,7 @@ def default_config():
         "width": 120,
         "height": 80
     }
-    config['gen_method'] = 'plates'
+    config['gen_method'] = 'faults'
     
     config['plates'] = {}
     config['plates']['gen_plate_count'] = 60
@@ -32,10 +32,15 @@ def default_config():
     config['plates']['merge_plates_count'] = 48
     
     config['faults'] = {}
-    config['faults']['n_selected_tiles'] = 24
-    config['faults']['branching_chance'] = 0.1
-    config['faults']['max_branch_depth'] = 2
+    config['faults']['n_selected_tiles'] = 3
+    config['faults']['branching_chance'] = 0.01
+    config['faults']['max_branch_depth'] = 1
     config['faults']['stop_on_intersection'] = True
+    config['faults']['method'] = 1 # Choose the method for the fault generation. 
+    # Method 1: generates lines 1 by 1 and the branches are generated during the procedure
+    # Method 2: generates lines 1 by 1 and the branches are generated after the main faults
+    # Method 3: generated lines in parallel and the branches are generated during the procedure
+    # Method 4: generates lines in parallel and the branches are generated after the main faults.
     
     config['generator_consumer'] = {}
     config['generator_consumer']['max_iter'] = 100
