@@ -1,5 +1,14 @@
 import math
 
+
+# === GENERAL TODO NOTES ===
+# TODO - think about Albedo
+# TODO - temperature should be tracked as average, minimum, and maximum, probably.
+# TODO - if the map takes too long to stabilize, we can consider adding neighbor smoothing during the generation of the climate (probably not during gameplay)
+# TODO - add soil quality/minerals as a factor in plant growth (and beyond)
+# TODO - add roughness of terrain as a factor in wind speed (and beyond)
+
+
 # === UTILS ===
 def is_sea_tile(tile, config):
     return tile.altitude <= config["sea_level"]
@@ -103,12 +112,6 @@ config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K): ideal gas c
 config['climate']['plant_transpiration'] = 0.01         # kg    : base value for water lost to transpiration per kg of biomass per iteration
 
 
-# === GENERAL TODO NOTES ===
-# TODO - think about Albedo
-# TODO - temperature should be tracked as average, minimum, and maximum, probably.
-# TODO - if the map takes too long to stabilize, we can consider adding neighbor smoothing during the generation of the climate (probably not during gameplay)
-
-
 # === BASIC CALCULATION FUNCTIONS ===
 # normalized_latitude: between -1 and 1, with 0 being equator and -1 and 1 being the poles
 def calculate_spherical_average_yearly_solar_radiation(config, normalized_latitude):
@@ -193,7 +196,9 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
         return 0.0
     
     # How to make a plant: Water, Energy, Food
-    
+    # And some magic: add a small constant to allow spontaneous vegetation growth
+    prev_biomass = prev_biomass + biomass_growth_constant
+
     # === WATER === #
     # from water_flow, we can determine how much water is available for use
     # assume it's the same, for now. Here we're considering ground water to be measured in kg/m^2/s, as in kilos of water available per unit of surface area in any given second
@@ -220,7 +225,7 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     
     # === FOOD === #
     # plants rely on food, minerals and stuff from the soil
-    # TODO - think about this later, for now ignore it
+    # think about this later, for now ignore it
     mineral_factor = 1.0 
 
     # === GROWTH === #
@@ -231,8 +236,7 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     temperature_factor = _temperature_growth_factor(temperature)
     growth_factor *= temperature_factor
     
-    # add a small constant to allow spontaneous vegetation, and multiply by growth
-    biomass = (prev_biomass + biomass_growth_constant) * (1.0 + growth_factor)
+    biomass = prev_biomass * (1.0 + growth_factor)
     return biomass
 
 # temperature in Celsius
@@ -311,8 +315,10 @@ def calculate_plant_humidity_absorption(config, biomass, vapor_content, vapor_ca
     humidity_intake = humidity_absorption_rate * (vapor_content / vapor_capacity) * biomass
     return humidity_intake
 
-def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity):
+def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity, is_sea_tile):
     return 0 # TODO
+    # sea tiles always have maximum evaporation
+    # otherwise, proportional to water flow, temperature, and inversely with ratio of vapor content/capacity
 
 
 # === ITERATIVE FUNCTIONS ===
@@ -357,12 +363,14 @@ def all_air_pressure(grid, config, state, prev_state):
 def all_vapor_capacity(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['vapor_capacity'] = calculate_vapor_capacity(
+            config,
             state[tile.id]['temperature']
         )
 
 def all_vapor_content(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['vapor_content'] = calculate_vapor_content(
+            config,
             prev_state[tile.id]['vapor_content'],
             state[tile.id]['evaporation'],
             state[tile.id]['evapotranspiration'],
@@ -372,6 +380,7 @@ def all_vapor_content(grid, config, state, prev_state):
 def all_evapotranspiration(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['evapotranspiration'] = calculate_evapotranspiration(
+            config,
             prev_state[tile.id]['biomass'],
             prev_state[tile.id]['temperature'],
             prev_state[tile.id]['vapor_content'],
@@ -381,6 +390,7 @@ def all_evapotranspiration(grid, config, state, prev_state):
 def all_evaporation(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['vapor_capacity'] = calculate_evaporation(
+            config,
             prev_state[tile.id]['water_flow'],
             prev_state[tile.id]['temperature'],
             prev_state[tile.id]['vapor_content'],
@@ -399,6 +409,7 @@ def all_plant_humidity_absorption(grid, config, state, prev_state):
 def all_cloud_density(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['cloud_density'] = calculate_cloud_density(
+            config,
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
@@ -470,7 +481,7 @@ def distribution_wind(grid, config, state, prev_state):
         # 
     pass
 
-def distribuiton_water_flow():
+def distribuiton_water_flow(grid, config, state, prev_state):
     # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
     # iteratively:
         # pop queue
@@ -543,6 +554,21 @@ def starting_state(grid, config):
     # each of the functions mutates state directly
     state = init_state(grid)
     
+    #           (is required means it's needed for the first iteration)
+    # VARIABLE                  - IS REQUIRED - IS INITIALIZED
+    # solar radiation           - Yes         - Yes
+    # temperature               - Yes         - Yes
+    # vapor_capacity            - Yes         - Yes
+    # evaporation               - No          - As 0
+    # evapotranspiration        - Yes         - As 0
+    # plant_humidity_absorption - Yes         - As 0
+    # vapor_content             - No          - Yes
+    # air_pressure              - No          - Yes
+    # cloud_density             - No          - Yes
+    # biomass                   - No          - No
+    # wind                      - No          - No
+    # precipitation             - No          - No
+    # water_flow                - No          - No
     for tile in grid.tiles:
         state[tile.id]['solar_radiation'] = calculate_solar_radiation_init(
             config,
@@ -576,6 +602,10 @@ def starting_state(grid, config):
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
+
+        state[tile.id]['evaporation'] = 0.0
+        state[tile.id]['evapotranspiration'] = 0.0
+        state[tile.id]['plant_humidity_absorption'] = 0.0
 
     return state
 
