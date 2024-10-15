@@ -17,11 +17,66 @@ def init_state(grid):
     state = {} # climate variable objects indexed by tile id
     for tile in grid.tiles:
         state[tile.id] = {}
+    return state
+
+# Directions in a flat-topped hex grid (axial coordinates)
+AXIAL_DIRECTIONS = [
+    (1, 0),   # Right
+    (1, -1),  # Top-right
+    (0, -1),  # Top-left
+    (-1, 0),  # Left
+    (-1, 1),  # Bottom-left
+    (0, 1)    # Bottom-right
+]
+
+# from a tile and a (wind or water flow) vector, returns the neighbors it points to and the ratio
+#   the "ratio" is 1.0 if the vector points exactly from the center of the tile to the center of a neighbor,
+#   0.5 if it points straight to the middle point between 2 neighbors
+#   etc
+def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
+    q = tile.col
+    r = tile.row
+    
+    angle = math.atan2(vector[1], vector[0])
+    if angle < 0: # Normalize the angle between 0 and 2π
+        angle += 2 * math.pi    
+    
+    hex_angles = [
+        0,                   # Right (1, 0)
+        math.pi / 3,         # Top-right (1, -1)
+        2 * math.pi / 3,     # Top-left (0, -1)
+        math.pi,             # Left (-1, 0)
+        4 * math.pi / 3,     # Bottom-left (-1, 1)
+        5 * math.pi / 3      # Bottom-right (0, 1)
+    ]
+    
+    # Find which two directions the vector lies between
+    for i in range(len(hex_angles)):
+        next_i = (i + 1) % len(hex_angles)
+        if hex_angles[i] <= angle < hex_angles[next_i]:
+            # Calculate the ratio of the angle between the two directions
+            total_angle_diff = hex_angles[next_i] - hex_angles[i]
+            angle_diff = angle - hex_angles[i]
+            ratio = 1 - (angle_diff / total_angle_diff)
+            
+            # Get the neighboring tiles
+            coords1 = (q + AXIAL_DIRECTIONS[i][0], r + AXIAL_DIRECTIONS[i][1])
+            coords2 = (q + AXIAL_DIRECTIONS[next_i][0], r + AXIAL_DIRECTIONS[next_i][1])
+            first_neighbor = tile.grid.get_tile(coords1[0], coords1[1])
+            second_neighbor = tile.grid.get_tile(coords2[0], coords2[1])
+            
+            return ((first_neighbor, ratio), (second_neighbor, 1 - ratio))
+    
+    # Handle edge case if the angle is exactly aligned with one direction
+    coords = (q + AXIAL_DIRECTIONS[0][0], r + AXIAL_DIRECTIONS[0][1])
+    neighbor = tile.grid.get_tile(coords[0], coords[1])
+    return (neighbor, 1.0)
 
 
 # === CONFIG CONSTANTS ===
 config = {}
 config['climate'] = {}
+config['climate']['max_iterations'] = 100
 config['climate']['temperature_lapse_rate'] = 0.0065    # C/m   : rate of decrease in temperature with height
 config['climate']['geothermal_constant'] = 0            # C     : a flat temperature bonus to every tile from the planet's own heat
 config['climate']['reference_temperature'] = 27         # C     : the baseline for temperature around the equator, not counting geothermal effects, basically
@@ -45,6 +100,7 @@ config['climate']['atmospheric_pressure'] = 101325      # Pa    : standard atmos
 config['climate']['g'] = 9.80665                        # m/s^2 : acceleration due to gravity
 config['climate']['planet_molar_mass'] = 0.0289644      # kg/mol: molar mass of Earth's air
 config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K): ideal gas constant
+config['climate']['plant_transpiration'] = 0.01         # kg    : base value for water lost to transpiration per kg of biomass per iteration
 
 
 # === GENERAL TODO NOTES ===
@@ -76,7 +132,7 @@ def calculate_cyllindral_average_yearly_solar_radiation(config, normalized_latit
     # So the angle of incidence for solar radiation will be approximately the same for every point of the cyllinder
     return solar_constant
 
-def calculate_precipitation(vapor_content, vapor_capacity, cloud_density):
+def calculate_precipitation(config, vapor_content, vapor_capacity, cloud_density):
     relative_humidity_threshold = config['climate']['relative_humidity_precipitation_threshold']
     precipitation_rate_multiplier = config['climate']['precipitation_rate_multiplier']
     relative_humidity = vapor_content / vapor_capacity
@@ -87,15 +143,15 @@ def calculate_solar_radiation_init(config, normalized_latitude):
     return calculate_spherical_average_yearly_solar_radiation(normalized_latitude)
 
 def calculate_solar_radiation(config, normalized_latitude, cloud_density):
-    CLOUD_REDUCTION_FACTOR = config['climate']['cloud_reduction_factor']
-    return calculate_solar_radiation_init(config, normalized_latitude) * (1.0 - cloud_density * CLOUD_REDUCTION_FACTOR)
+    cloud_reduction_factor = config['climate']['cloud_reduction_factor']
+    return calculate_solar_radiation_init(config, normalized_latitude) * (1.0 - cloud_density * cloud_reduction_factor)
 
 def calculate_cloud_density_init(config, vapor_content, vapor_capacity):
     humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
     relative_humidity = vapor_content / vapor_capacity
     return max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
 
-def calculate_cloud_density(prev_cloud_density, vapor_content, vapor_capacity, humidity_cloud_formation_threshold=0.75):
+def calculate_cloud_density(config, prev_cloud_density, vapor_content, vapor_capacity, humidity_cloud_formation_threshold=0.75):
     # TODO - review this, think about how we manage cloud density and humidity and how we iterate cloud density
     relative_humidity = (prev_cloud_density + vapor_content) / vapor_capacity
     return max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
@@ -188,10 +244,8 @@ def calculate_temperature(config, altitude, solar_radiation):
 
     # assume geothermal_constant just gives us our base temperature for the world at sea level
     temperature = geothermal_constant
-    
     # we add an effect from radiation, for now just as a linear scale with no real physics, using the earth's equator as reference
     temperature += solar_radiation/reference_radiation * reference_temperature
-    
     # temperature decreases with altitude
     temperature -= altitude * temperature_lapse_rate
 
@@ -201,10 +255,10 @@ def calculate_temperature_init(config, altitude, solar_radiation):
     return calculate_temperature(config, altitude, solar_radiation)
 
 # in g/m^3
-def calculate_vapor_capacity_init(temperature):
+def calculate_vapor_capacity_init(config, temperature):
     return calculate_vapor_capacity(temperature)
 
-def calculate_vapor_capacity(temperature):
+def calculate_vapor_capacity(config, temperature):
     # TODO - export these constants to the config
     # NOTE: Current model is best suited for standard temperature and pressure, so within 50º of 0ºC and close to 0 atm.
     # Clausius-Clapeyron equation
@@ -213,28 +267,36 @@ def calculate_vapor_capacity(temperature):
     saturation_vapor_capacity = 216.7 * saturation_vapor_pressure / (temperature + 273.15)
     return saturation_vapor_capacity
 
-def calculate_vapor_content(prev_vapor_content, evaporation, evapotransporation, plant_humidity_absorption):
+def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransporation, plant_humidity_absorption):
     # todo
     pass
 
-def calculate_vapor_content_init(is_sea, vapor_capacity):
+def calculate_vapor_content_init(config, is_sea, vapor_capacity):
     return vapor_capacity if is_sea else 0.1 * vapor_capacity
 
 def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL = calculate_temperature_init(config, 0, 0) + 273.15):
     return calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
 
 def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL = calculate_temperature_init(config, 0, 0) + 273.15):
+    g = config['climate']['g']
+    planet_molar_mass = config['climate']['planet_molar_mass']
+    universal_gas_constant = config['climate']['universal_gas_constant']
+    atmospheric_pressure = config['climate']['atmospheric_pressure']
+    temperature_lapse_rate = config['climate']['temperature_lapse_rate']
     # TODO - should probably reconsider how this is calculated, regarding temperature at sea level? Need to understand the formula better
+    # TODO - these constants combine into the atmospheric pressure scale height constant, which is 0.00012 m^-1
+    # - So maybe we could pass in a base version of this constant, and adjust it based on the variables other than temperature and universal gas constant 
     
+
     temperature_change_coefficient = (1 - temperature_lapse_rate * altitude / TEMPERATURE_AT_SEA_LEVEL)
-    exp_constant = G * PLANET_MOLAR_MASS / UNIVERSAL_GAS_CONSTANT / temperature_lapse_rate
+    exp_constant = g * planet_molar_mass / universal_gas_constant / temperature_lapse_rate
     
     # Barometric formula
     pressure = atmospheric_pressure * (temperature_change_coefficient ** exp_constant)
     return pressure
     
 # plants lose water to the air
-def calculate_evapotranspiration(biomass, temperature, vapor_content, vapor_capacity, transpiration_rate):
+def calculate_evapotranspiration(config, biomass, temperature, vapor_content, vapor_capacity, transpiration_rate):
     return 0 # TODO 
     humidity_factor = min(1.0, vapor_content / vapor_capacity)
     temperature_factor = 1.0 # temperature influences this as well
@@ -249,82 +311,47 @@ def calculate_plant_humidity_absorption(config, biomass, vapor_content, vapor_ca
     humidity_intake = humidity_absorption_rate * (vapor_content / vapor_capacity) * biomass
     return humidity_intake
 
-def calculate_evaporation(water_flow, temperature, vapor_content, vapor_capacity):
+def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity):
     return 0 # TODO
 
 
 # === ITERATIVE FUNCTIONS ===
 def all_solar_radiation(grid, config, state, prev_state):
-    CLOUD_REDUCTION_FACTOR = 0.8 # this should come from config
-    
     for tile in grid.tiles:
         latitude = normalized_latitude(tile)
         state[tile.id]['solar_radiation'] = calculate_solar_radiation(
+            config,
             latitude, 
-            prev_state[tile.id]['cloud_density'],
-            CLOUD_REDUCTION_FACTOR
+            prev_state[tile.id]['cloud_density']
         )
 
 def all_biomass(grid, config, state, prev_state):
-    SOLAR_CONSTANT = 1361
-    PLANT_SOLAR_CONVERSION_RATE = 0.02
-    PHOTOSYNTHESIS_RADIATION_RATIO = 0.45
-    BIOMASS_EFFICIENCY_EXPONENT = 0.75
-    ONE_KILO_INTAKE_REFERENCE = 0.00001157407
-    
     for tile in grid.tiles:
         state[tile.id]['biomass'] = calculate_biomass(
+            config,
             prev_state[tile.id]['biomass'],
             prev_state[tile.id]['evapotranspiration'],
             prev_state[tile.id]['plant_humidity_absorption'],
             prev_state[tile.id]['water_flow'],
             prev_state[tile.id]['solar_radiation'],
             prev_state[tile.id]['temperature'],
-            is_sea_tile(tile, config),
-            SOLAR_CONSTANT,
-            PLANT_SOLAR_CONVERSION_RATE,
-            PHOTOSYNTHESIS_RADIATION_RATIO,
-            BIOMASS_EFFICIENCY_EXPONENT,
-            ONE_KILO_INTAKE_REFERENCE
+            is_sea_tile(tile, config)
         )
 
 def all_temperature(grid, config, state, prev_state):
-    TEMPERATURE_LAPSE_RATE = 0.0065
-    GEOTHERMAL_CONSTANT = 0
-    REFERENCE_TEMPERATURE = 27 # the baseline for temperature around the equator, not counting geothermal effects, basically
-    REFERENCE_RADIATION = 1361 # radiation on the earth's equator - the EARTH's, not the PLANET's, we use this as a baseline for surface temperatures
-
     for tile in grid.tiles:
         state[tile.id]['temperature'] = calculate_temperature(
+            config,
             state[tile.id]['solar_radiation'],
-            tile.altitude,
-            TEMPERATURE_LAPSE_RATE,
-            GEOTHERMAL_CONSTANT,
-            REFERENCE_TEMPERATURE,
-            REFERENCE_RADIATION
+            tile.altitude
         )
 
 def all_air_pressure(grid, config, state, prev_state):
-    TEMPERATURE_LAPSE_RATE=0.0065
-    ATMOSPHERIC_PRESSURE=101325
-    G = 9.80665 # m/s^2
-    PLANET_MOLAR_MASS = 0.0289644 # kg/mol
-    UNIVERSAL_GAS_CONSTANT = 8.31432, # J/(mol.K)
-    TEMPERATURE_AT_SEA_LEVEL = calculate_temperature_init(0) + 273.15 # K
-    
-    # TODO - these constants combine into the atmospheric pressure scale height constant, which is 0.00012 m^-1
-    # - So maybe we could pass in a base version of this constant, and adjust it based on the variables other than temperature and universal gas constant 
-    
     for tile in grid.tiles:
         state[tile.id]['air_pressure'] = calculate_air_pressure(
+            config,
             state[tile.id]['temperature'],
-            tile.altitude,
-            TEMPERATURE_LAPSE_RATE,
-            ATMOSPHERIC_PRESSURE,
-            G,
-            PLANET_MOLAR_MASS,
-            UNIVERSAL_GAS_CONSTANT,
-            TEMPERATURE_AT_SEA_LEVEL
+            tile.altitude
         )
 
 def all_vapor_capacity(grid, config, state, prev_state):
@@ -343,15 +370,12 @@ def all_vapor_content(grid, config, state, prev_state):
         )
 
 def all_evapotranspiration(grid, config, state, prev_state):
-    PLANT_TRANSPIRATION = 0.01 # kg of water lost per kg of biomass per second
-    
     for tile in grid.tiles:
         state[tile.id]['evapotranspiration'] = calculate_evapotranspiration(
             prev_state[tile.id]['biomass'],
             prev_state[tile.id]['temperature'],
             prev_state[tile.id]['vapor_content'],
-            prev_state[tile.id]['vapor_capacity'],
-            PLANT_TRANSPIRATION
+            prev_state[tile.id]['vapor_capacity']
         )
 
 def all_evaporation(grid, config, state, prev_state):
@@ -373,66 +397,11 @@ def all_plant_humidity_absorption(grid, config, state, prev_state):
         )
 
 def all_cloud_density(grid, config, state, prev_state):
-
     for tile in grid.tiles:
         state[tile.id]['cloud_density'] = calculate_cloud_density(
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
-
-
-# Directions in a flat-topped hex grid (axial coordinates)
-AXIAL_DIRECTIONS = [
-    (1, 0),   # Right
-    (1, -1),  # Top-right
-    (0, -1),  # Top-left
-    (-1, 0),  # Left
-    (-1, 1),  # Bottom-left
-    (0, 1)    # Bottom-right
-]
-
-# from a tile and a (wind or water flow) vector, returns the neighbors it points to and the ratio
-#   the "ratio" is 1.0 if the vector points exactly from the center of the tile to the center of a neighbor,
-#   0.5 if it points straight to the middle point between 2 neighbors
-#   etc
-def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
-    q = tile.col
-    r = tile.row
-    
-    angle = math.atan2(vector[1], vector[0])
-    if angle < 0: # Normalize the angle between 0 and 2π
-        angle += 2 * math.pi    
-    
-    hex_angles = [
-        0,                   # Right (1, 0)
-        math.pi / 3,         # Top-right (1, -1)
-        2 * math.pi / 3,     # Top-left (0, -1)
-        math.pi,             # Left (-1, 0)
-        4 * math.pi / 3,     # Bottom-left (-1, 1)
-        5 * math.pi / 3      # Bottom-right (0, 1)
-    ]
-    
-    # Find which two directions the vector lies between
-    for i in range(len(hex_angles)):
-        next_i = (i + 1) % len(hex_angles)
-        if hex_angles[i] <= angle < hex_angles[next_i]:
-            # Calculate the ratio of the angle between the two directions
-            total_angle_diff = hex_angles[next_i] - hex_angles[i]
-            angle_diff = angle - hex_angles[i]
-            ratio = 1 - (angle_diff / total_angle_diff)
-            
-            # Get the neighboring tiles
-            coords1 = (q + AXIAL_DIRECTIONS[i][0], r + AXIAL_DIRECTIONS[i][1])
-            coords2 = (q + AXIAL_DIRECTIONS[next_i][0], r + AXIAL_DIRECTIONS[next_i][1])
-            first_neighbor = tile.grid.get_tile(coords1[0], coords1[1])
-            second_neighbor = tile.grid.get_tile(coords2[0], coords2[1])
-            
-            return ((first_neighbor, ratio), (second_neighbor, 1 - ratio))
-    
-    # Handle edge case if the angle is exactly aligned with one direction
-    coords = (q + AXIAL_DIRECTIONS[0][0], r + AXIAL_DIRECTIONS[0][1])
-    neighbor = tile.grid.get_tile(coords[0], coords[1])
-    return (neighbor, 1.0)
 
 
 # === DISTRIBUTION FUNCTIONS ===
@@ -612,7 +581,7 @@ def starting_state(grid, config):
 
 # the actual function supposed to be called from outside this module
 def generate_climate(grid, config):
-    CLIMATE_MAX_ITER = 100
+    CLIMATE_MAX_ITER = config['climate']['max_iterations']
     
     state = starting_state(grid, config)
 
