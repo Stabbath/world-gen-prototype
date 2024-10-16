@@ -11,7 +11,7 @@ from config import default_config, ui_fields as UI_FIELDS
 #from config_panel import ConfigPanel
 from config_filer import update_config_from_file, config_to_file
 from view_tabs import TabPanel
-from climate import generate_climate
+from climate.climate import generate_climate
 
 # ------------------------------
 # Constants and Configurations

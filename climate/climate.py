@@ -69,11 +69,16 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
             angle_diff = angle - hex_angles[i]
             ratio = 1 - (angle_diff / total_angle_diff)
             
-            # Get the neighboring tiles
-            coords1 = (q + AXIAL_DIRECTIONS[i][0], r + AXIAL_DIRECTIONS[i][1])
-            coords2 = (q + AXIAL_DIRECTIONS[next_i][0], r + AXIAL_DIRECTIONS[next_i][1])
+            # Get the neighboring tiles, adjust for dimensions, in case wraparound is enabled and the wind is pointing us there
+            q1 = (q + AXIAL_DIRECTIONS[i][0]) % tile.grid.width
+            r1 = (r + AXIAL_DIRECTIONS[i][1]) % tile.grid.height
+            q2 = (q + AXIAL_DIRECTIONS[next_i][0]) % tile.grid.width
+            r2 = (r + AXIAL_DIRECTIONS[next_i][1]) % tile.grid.height
+            coords1 = (q1, r1)
+            coords2 = (q2, r2)
             first_neighbor = tile.grid.get_tile(coords1[0], coords1[1])
             second_neighbor = tile.grid.get_tile(coords2[0], coords2[1])
+            print('COORDS:', coords1, coords2, "RATIO", ratio)
             
             return ((first_neighbor, ratio), (second_neighbor, 1 - ratio))
     
@@ -84,57 +89,58 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
 
 
 # === CONFIG CONSTANTS ===
-config = {}
-config['climate'] = {}
-config['climate']['max_iterations'] = 100
-config['climate']['smoothen_temperature_map'] = True
-config['climate']['temperature_smoothing_self_weight'] = 3
-config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
-config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
-config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
-config['climate']['reference_radiation'] = 1361         # W/m^2     : the radiation which will give the equator the reference_temperature
-config['climate']['cloud_reduction_factor'] = 0.8       #           : how much a cloud density of 1.0 reduces incoming solar radiation by
-config['climate']['solar_constant'] = 1361              # W/m^2     : average solar energy received per unit area at the top of the atmosphere / at the equator
-config['climate']['relative_humidity_precipitation_threshold'] = 0.85 # % : how much relative humidity we need for it to cause precipitation
-config['climate']['precipitation_rate_multiplier'] = 1  #           : factor to multiply precipitation rate by
-config['climate']['plant_cold_threshold'] = 0           # C         : temperature below which growth stops
-config['climate']['plant_optimal_low'] = 15             # C         : lower bound for optimal growth
-config['climate']['plant_optimal_high'] = 25            # C         : upper bound for optimal growth
-config['climate']['plant_hot_threshold'] = 45           # C         : temperature above which growth stops
-config['climate']['photosynthesis_radiation_ratio'] = 0.45 #        : how much of the solar radiation is converted to energy for the plant
-config['climate']['solar_conversion_rate'] = 0.02       #           : how much of the solar energy is converted into growth for the plant
-config['climate']['biomass_efficiency_exponent'] = 1.33 #           : exponent to define improved water efficiency from higher biomass in processing water intake
-config['climate']['one_kilo_intake_reference'] = 0.00001157407 # kg/s : how much water a standard 1kg plant can take per second
-config['climate']['biomass_growth_constant'] = 0.0001   # kg        : how much flat biomass is added to each tile each iteration
-config['climate']['humidity_cloud_formation_threshold'] = 0.75 # % : relative humidity at which clouds start forming
-config['climate']['humidity_absorption_rate'] = 0.001   # kg/s      : how much water a plant can absorb from the air per second
-config['climate']['atmospheric_pressure'] = 101325      # Pa        : standard atmospheric pressure at sea level
-config['climate']['g'] = 9.80665                        # m/s^2     : acceleration due to gravity
-config['climate']['planet_molar_mass'] = 0.0289644      # kg/mol    : molar mass of Earth's air
-config['climate']['water_molar_mass'] = 0.01801528      # kg/mol    : molar mass of water
-config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K) : ideal gas constant
-config['climate']['plant_transpiration'] = 0.01         # kg        : base value for water lost to transpiration per kg of biomass per iteration
-config['climate']['evaporation_rate_factor'] = 1.0      #           : factor to multiply evaporation rate by
-config['climate']['water_temperature_multiplier'] = 0.8 # C         : factor to multiply temperature by to obtain water temperature
-config['climate']['water_temperature_constant'] = 3     # C         : constant to add to temperature to obtain water temperature
-config['climate']['water_temperature_multiplier_ocean'] = 0.4 # C   : factor to multiply temperature by to obtain water temperature; for the ocean
-config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant to add to temperature to obtain water temperature; for the ocean
-config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
-config['climate']['cloud_density_to_water_ratio'] = 0.1 #           : ratio to convert cloud density into rain
-config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
-config['climate']['wind_friction_altitude'] = 0.0005    #           : how much friction is added per meter of altitude difference
-config['climate']['wind_friction_biomass'] = 0.0005     #           : how much friction is added per kg of biomass per surface
-config['climate']['specific_gas_constant_for_air'] = 287.058 # J/(kg.K) : specific gas constant for dry air
-config['climate']['planet_angular_velocity'] = 0.000072921 # rad / s : angular velocity of the planet
-config['climate']['winds_max_vapor_transfer_speed'] = 10 # m/s      : wind speed required to transfer all of the appropriate variable out of a tile
-config['climate']['winds_max_cloud_transfer_speed'] = 25 # m/s      : ""
-config['climate']['winds_max_pressure_transfer_speed'] = 30 # m/s   : ""
-config['climate']['winds_max_temperature_transfer_speed'] = 15 # m/s : ""
-config['climate']['winds_max_vapor_transfer_ratio'] = 0.5 #         : how much of the variable is transferred by the wind at max wind
-config['climate']['winds_max_cloud_transfer_ratio'] = 0.6 #         : ""
-config['climate']['winds_max_pressure_transfer_ratio'] = 0.05 #     : ""
-config['climate']['winds_max_temperature_transfer_ratio'] = 0.1 #   : ""
-
+def default_climate_config():
+    config = {}
+    config['climate'] = {}
+    config['climate']['max_iterations'] = 100
+    config['climate']['smoothen_temperature_map'] = True
+    config['climate']['temperature_smoothing_self_weight'] = 3
+    config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
+    config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
+    config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
+    config['climate']['reference_radiation'] = 1361         # W/m^2     : the radiation which will give the equator the reference_temperature
+    config['climate']['cloud_reduction_factor'] = 0.8       #           : how much a cloud density of 1.0 reduces incoming solar radiation by
+    config['climate']['solar_constant'] = 1361              # W/m^2     : average solar energy received per unit area at the top of the atmosphere / at the equator
+    config['climate']['relative_humidity_precipitation_threshold'] = 0.85 # % : how much relative humidity we need for it to cause precipitation
+    config['climate']['precipitation_rate_multiplier'] = 1  #           : factor to multiply precipitation rate by
+    config['climate']['plant_cold_threshold'] = 0           # C         : temperature below which growth stops
+    config['climate']['plant_optimal_low'] = 15             # C         : lower bound for optimal growth
+    config['climate']['plant_optimal_high'] = 25            # C         : upper bound for optimal growth
+    config['climate']['plant_hot_threshold'] = 45           # C         : temperature above which growth stops
+    config['climate']['photosynthesis_radiation_ratio'] = 0.45 #        : how much of the solar radiation is converted to energy for the plant
+    config['climate']['solar_conversion_rate'] = 0.02       #           : how much of the solar energy is converted into growth for the plant
+    config['climate']['biomass_efficiency_exponent'] = 1.33 #           : exponent to define improved water efficiency from higher biomass in processing water intake
+    config['climate']['one_kilo_intake_reference'] = 0.00001157407 # kg/s : how much water a standard 1kg plant can take per second
+    config['climate']['biomass_growth_constant'] = 0.0001   # kg        : how much flat biomass is added to each tile each iteration
+    config['climate']['humidity_cloud_formation_threshold'] = 0.75 # % : relative humidity at which clouds start forming
+    config['climate']['humidity_absorption_rate'] = 0.001   # kg/s      : how much water a plant can absorb from the air per second
+    config['climate']['atmospheric_pressure'] = 101325      # Pa        : standard atmospheric pressure at sea level
+    config['climate']['g'] = 9.80665                        # m/s^2     : acceleration due to gravity
+    config['climate']['planet_molar_mass'] = 0.0289644      # kg/mol    : molar mass of Earth's air
+    config['climate']['water_molar_mass'] = 0.01801528      # kg/mol    : molar mass of water
+    config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K) : ideal gas constant
+    config['climate']['plant_transpiration'] = 0.01         # kg        : base value for water lost to transpiration per kg of biomass per iteration
+    config['climate']['evaporation_rate_factor'] = 1.0      #           : factor to multiply evaporation rate by
+    config['climate']['water_temperature_multiplier'] = 0.8 # C         : factor to multiply temperature by to obtain water temperature
+    config['climate']['water_temperature_constant'] = 3     # C         : constant to add to temperature to obtain water temperature
+    config['climate']['water_temperature_multiplier_ocean'] = 0.4 # C   : factor to multiply temperature by to obtain water temperature; for the ocean
+    config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant to add to temperature to obtain water temperature; for the ocean
+    config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
+    config['climate']['cloud_density_to_water_ratio'] = 0.1 #           : ratio to convert cloud density into rain
+    config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
+    config['climate']['wind_friction_altitude'] = 0.0005    #           : how much friction is added per meter of altitude difference
+    config['climate']['wind_friction_biomass'] = 0.0005     #           : how much friction is added per kg of biomass per surface
+    config['climate']['specific_gas_constant_for_air'] = 287.058 # J/(kg.K) : specific gas constant for dry air
+    config['climate']['planet_angular_velocity'] = 0.000072921 # rad / s : angular velocity of the planet
+    config['climate']['winds_max_vapor_transfer_speed'] = 10 # m/s      : wind speed required to transfer all of the appropriate variable out of a tile
+    config['climate']['winds_max_cloud_transfer_speed'] = 25 # m/s      : ""
+    config['climate']['winds_max_pressure_transfer_speed'] = 30 # m/s   : ""
+    config['climate']['winds_max_temperature_transfer_speed'] = 15 # m/s : ""
+    config['climate']['winds_max_vapor_transfer_ratio'] = 0.5 #         : how much of the variable is transferred by the wind at max wind
+    config['climate']['winds_max_cloud_transfer_ratio'] = 0.6 #         : ""
+    config['climate']['winds_max_pressure_transfer_ratio'] = 0.05 #     : ""
+    config['climate']['winds_max_temperature_transfer_ratio'] = 0.1 #   : ""
+    return config
 
 # === CLIMATE VARIABLES === 
 units = {
@@ -204,7 +210,7 @@ def calculate_precipitation(config, vapor_content, vapor_capacity, cloud_density
     return precipitation_rate_multiplier * cloud_density  * excess_humidity
 
 def calculate_solar_radiation_init(config, normalized_latitude):
-    return calculate_spherical_average_yearly_solar_radiation(normalized_latitude)
+    return calculate_spherical_average_yearly_solar_radiation(config, normalized_latitude)
 
 def calculate_solar_radiation(config, normalized_latitude, cloud_density):
     cloud_reduction_factor = config['climate']['cloud_reduction_factor']
@@ -317,7 +323,7 @@ def calculate_temperature_init(config, altitude, solar_radiation):
 
 # in g/m^3
 def calculate_vapor_capacity_init(config, temperature):
-    return calculate_vapor_capacity(temperature)
+    return calculate_vapor_capacity(config, temperature)
 
 def aux_calculate_saturation_vapor_pressure(config, temperature):
     # Auguste-Roche-Magnus equation (see Clausius-Clapeyron relation)
@@ -339,10 +345,10 @@ def calculate_vapor_capacity(config, temperature):
 def calculate_vapor_content_init(config, is_sea, vapor_capacity):
     return vapor_capacity if is_sea else 0.1 * vapor_capacity
 
-def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL = calculate_temperature_init(config, 0, 0) + 273.15):
+def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
     return calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
 
-def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL = calculate_temperature_init(config, 0, 0) + 273.15):
+def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
     g = config['climate']['g']
     planet_molar_mass = config['climate']['planet_molar_mass']
     universal_gas_constant = config['climate']['universal_gas_constant']
@@ -367,7 +373,7 @@ def calculate_evapotranspiration(config, biomass, temperature, vapor_content, va
     relative_humidity = min(1.0, vapor_content / vapor_capacity)
     temperature_factor = max(0.0, temperature / transpiration_reference_temperature) # assuming linear for now
     transpiration_loss_per_biomass = transpiration_rate * (1.0 - relative_humidity) * temperature_factor 
-    transpiration_loss_per_biomass = math.min(transpiration_loss_per_biomass, 1.0) # can't lose more water than you have
+    transpiration_loss_per_biomass = min(transpiration_loss_per_biomass, 1.0) # can't lose more water than you have
     transpiration_loss = transpiration_loss_per_biomass * biomass
     return transpiration_loss
 
@@ -408,6 +414,8 @@ def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransp
 # === ITERATIVE FUNCTIONS ===
 def all_solar_radiation(grid, config, state, prev_state):
     for tile in grid.tiles:
+        print('TILE', tile.id)
+        print('PREV STATE', prev_state)
         latitude = normalized_latitude(tile)
         state[tile.id]['solar_radiation'] = calculate_solar_radiation(
             config,
@@ -441,7 +449,8 @@ def all_air_pressure(grid, config, state, prev_state):
         state[tile.id]['air_pressure'] = calculate_air_pressure(
             config,
             state[tile.id]['temperature'],
-            tile.altitude
+            tile.altitude,
+            calculate_temperature_init(config, 0, 0) + 273.15 # TODO - think about this
         )
 
 def all_vapor_capacity(grid, config, state, prev_state):
@@ -473,7 +482,7 @@ def all_evapotranspiration(grid, config, state, prev_state):
 
 def all_evaporation(grid, config, state, prev_state):
     for tile in grid.tiles:
-        state[tile.id]['vapor_capacity'] = calculate_evaporation(
+        state[tile.id]['evaporation'] = calculate_evaporation(
             config,
             prev_state[tile.id]['water_flow'],
             prev_state[tile.id]['temperature'],
@@ -496,6 +505,7 @@ def all_cloud_density(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['cloud_density'] = calculate_cloud_density(
             config,
+            prev_state[tile.id]['cloud_density'],
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
@@ -529,7 +539,8 @@ def all_wind(grid, config, state, prev_state):
         # geostrophic wind is an approximation of the wind speed, which considers the coriolis effect and pressure gradient force to be in equilibrium
         # this is great because it accounts for the coriolis effect while also simplifying away the PGF and yielding a nice direct wind speed
         latitude = normalized_latitude(tile) * math.pi / 2
-        coriolis_parameter = 2 * planet_angular_velocity * math.sin(latitude)
+        epsilon = 1e-6  # Small regularization factor to prevent division by zero at equator
+        coriolis_parameter = 2 * planet_angular_velocity * math.sin(latitude + epsilon)
         k = 1 / (coriolis_parameter * air_density)
         # this is in m/s
         geostrophic_wind = (pressure_gradient[0] * k, pressure_gradient[1] * k) 
@@ -537,7 +548,8 @@ def all_wind(grid, config, state, prev_state):
         state[tile.id]['wind'] = geostrophic_wind
 
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
-        (neighbor1, ratio1), (neighbor2, ratio2) = vector_to_flat_hex_neighbors_and_ratio
+        print(vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind))
+        (neighbor1, ratio1), (neighbor2, ratio2) = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
         state[tile.id]['wind1'] = ratio1
         state[tile.id]['wind1_neighbor'] = neighbor1
         if (neighbor2): # it's possible to point straight to the center and therefore have only one downwind neighbor here
@@ -627,6 +639,8 @@ def distribution_water_flow(grid, config, state, prev_state):
         state[tile.id]['vapor_content'] -= state[tile.id]['precipitation']
         if not is_sea_tile(tile, config): # sea tiles don't have water flow
             state[tile.id]['water_flow'] = state[tile.id]['precipitation']
+        else:
+            state[tile.id]['water_flow'] = 0
 
         # cloud density is adjusted based on the change in vapor content
         state[tile.id]['cloud_density'] = calculate_cloud_density(
@@ -637,7 +651,7 @@ def distribution_water_flow(grid, config, state, prev_state):
         )
 
     # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
-    queue = sorted([tile for tile in grid.tiles if not is_sea_tile(tile)], key=lambda tile: tile.altitude, reverse=True)
+    queue = sorted([tile for tile in grid.tiles if not is_sea_tile(tile, config)], key=lambda tile: tile.altitude, reverse=True)
     while queue:
         tile = queue.pop(0)
 
@@ -708,6 +722,8 @@ def iterate_climate(grid, config, prev_state):
     # calculate precipitation, adjust cloud density, distribute water flow throughout the world
     distribution_water_flow(grid, config, state, prev_state)
 
+    return state
+
 def starting_state(grid, config):
     state = init_state(grid)
     
@@ -722,10 +738,10 @@ def starting_state(grid, config):
     # vapor_content             - No          - Yes
     # air_pressure              - No          - Yes
     # cloud_density             - No          - Yes
-    # biomass                   - No          - No
+    # biomass                   - Yes         - As 0
     # wind                      - No          - No
     # precipitation             - No          - No
-    # water_flow                - No          - No
+    # water_flow                - Yes         - As 0
     for tile in grid.tiles:
         state[tile.id]['solar_radiation'] = calculate_solar_radiation_init(
             config,
@@ -745,13 +761,15 @@ def starting_state(grid, config):
         
         state[tile.id]['vapor_content'] = calculate_vapor_content_init(
             config,
-            is_sea_tile(tile, config)
+            is_sea_tile(tile, config),
+            state[tile.id]['vapor_capacity']
         )
         
         state[tile.id]['air_pressure'] = calculate_air_pressure_init(
             config,
             state[tile.id]['temperature'],
-            tile.altitude
+            tile.altitude,
+            calculate_temperature_init(config, 0, 0) + 273.15 # TODO - think about this
         )
         
         state[tile.id]['cloud_density'] = calculate_cloud_density_init(
@@ -763,6 +781,8 @@ def starting_state(grid, config):
         state[tile.id]['evaporation'] = 0.0
         state[tile.id]['evapotranspiration'] = 0.0
         state[tile.id]['plant_humidity_absorption'] = 0.0
+        state[tile.id]['biomass'] = 0.0
+        state[tile.id]['water_flow'] = 0.0
 
     return state
 
@@ -773,6 +793,7 @@ def generate_climate(grid, config):
     state = starting_state(grid, config)
 
     for i in range(CLIMATE_MAX_ITER):
+        print('ITERATION', i)
         prev_state = state
         state = iterate_climate(grid, config, prev_state)
 

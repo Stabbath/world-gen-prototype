@@ -1,6 +1,8 @@
 from generators.tectonic_generator_faults import generate_world_faults
 from generators.tectonic_generator_plates import generate_world_plates
 
+from climate.climate import default_climate_config
+
 # TODO - this will become the way we interface with the generation later.
 # "config" will list the customizable options for generation, e.g. number of plates or lines, the data type and acceptable range
 # this will inform the UI for world gen, and will be how the generation functions process these settings
@@ -18,13 +20,13 @@ def default_config():
     config = {
         "max_altitude": 20000,
         "sea_level": 10000,
-        "width": 120,
-        "height": 80
+        "width": 10,
+        "height": 10
     }
-    config['gen_method'] = 'faults'
+    config['gen_method'] = 'plates'
     
     config['plates'] = {}
-    config['plates']['gen_plate_count'] = 60
+    config['plates']['gen_plate_count'] = 3
     config['plates']['altitude_gen_method'] = 'generator_consumer'
     config['plates']['individual_spread'] = True
     config['plates']['random_pop'] = False
@@ -51,6 +53,9 @@ def default_config():
     config['generator_consumer']['polar_plates_are_oceanic'] = False
     config['generator_consumer']['continental_plates_count'] = 2
     config['generator_consumer']['continents_count'] = 0
+    
+    climate_config = default_climate_config()
+    config.update(climate_config)
     return config
 
 # === BASE IDEA (cont.) - UI ===

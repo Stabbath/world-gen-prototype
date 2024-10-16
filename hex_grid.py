@@ -87,7 +87,7 @@ class Fault:
 @total_ordering
 class HexTile:
     def __init__(self, col, row, grid):
-        self.id = '$col.$row'
+        self.id = f'{col}.{row}'
         self.col = col
         self.row = row
         self.grid = grid
