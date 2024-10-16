@@ -53,6 +53,9 @@ def default_config():
     config['generator_consumer']['polar_plates_are_oceanic'] = False
     config['generator_consumer']['continental_plates_count'] = 2
     config['generator_consumer']['continents_count'] = 0
+    config['generator_consumer']['renormalize_genfactors'] = False
+    config['generator_consumer']['gen_factor_mu'] = 0
+    config['generator_consumer']['gen_factor_sigma'] = 0.4
     
     climate_config = default_climate_config()
     config.update(climate_config)

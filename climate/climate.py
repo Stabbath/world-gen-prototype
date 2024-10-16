@@ -10,9 +10,6 @@ import math
 # TODO - add roughness of terrain as a factor in wind friction (and beyond)
 # TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
 
-# TODO - IMPORTANT 
-# - fix wind, its causing all of the landmasses to heat up a lot for some reason
-
 # TODO - IMPORTANT - NEXT STEPS
 # - write alternative, simplified versions of every calculation
 # - define which version to use in the config, using string labels (e.g. "basic")
@@ -22,6 +19,7 @@ import math
 # - no evapotranspiration
 # - no water humidity absorption
 # ... what else ?
+# TODO - after that, fix biomass
 
 # === UTILS ===
 def is_sea_tile(tile, config):

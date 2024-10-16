@@ -16,6 +16,9 @@ def generator_consumer_model(grid, config, func_neighbors):
     SMOOTHEN_GENFACTORS = config['generator_consumer']['smoothen_genfactors']
     plate_continental_factor = config['generator_consumer']['plate_continental_factor']
     continental_plates_count = config['generator_consumer']['continental_plates_count']
+    RENORMALIZE_GENFACTORS = config['generator_consumer']['renormalize_genfactors']
+    gen_factor_sigma = config['generator_consumer']['gen_factor_sigma']
+    gen_factor_mu = config['generator_consumer']['gen_factor_mu']
 
     # Step 2.1 - Plate Properties
     plate_is_continental = {}
@@ -104,7 +107,7 @@ def generator_consumer_model(grid, config, func_neighbors):
     # We use a dictionary, external to the Fault class.
     generation_factors = {}
     for fault in grid.faults:
-        generation_factors[fault.id] = gaussian_in_range(min=-1, max=1)
+        generation_factors[fault.id] = gaussian_in_range(gen_factor_mu, gen_factor_sigma, min=-1, max=1)
 
     # Then we smooth these factors: we check for each fault its neighboring faults, and the Generation Factor we have for it,
     # and we recalculate them all as a weighted average of their own factor and their neighbors', with their own factor being worth twice as much for the average.
@@ -121,12 +124,13 @@ def generator_consumer_model(grid, config, func_neighbors):
         generation_factors = smoothed_generation_factors
     
     # Then, we renormalize everything so that the lowest is -1 and the highest is +1.
-    factor_values = generation_factors.values()
-    min_factor = min(factor_values)
-    max_factor = max(factor_values)
-    for fault_id, factor in generation_factors.items():
-        normalized_factor = -1 + 2 * (factor - min_factor) / (max_factor - min_factor)
-        generation_factors[fault_id] = normalized_factor
+    if RENORMALIZE_GENFACTORS:
+        factor_values = generation_factors.values()
+        min_factor = min(factor_values)
+        max_factor = max(factor_values)
+        for fault_id, factor in generation_factors.items():
+            normalized_factor = -1 + 2 * (factor - min_factor) / (max_factor - min_factor)
+            generation_factors[fault_id] = normalized_factor
 
     
     # === Step 3: Altitude Map Generation ===
