@@ -11,6 +11,13 @@ import math
 # TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
 
 # TODO - IMPORTANT - NEXT STEPS
+# - fix air pressure, it's currently dropping below the generous hexview minimums, on the whole map
+# - fix clouds too - they are beyond overcharged
+# - fix humidity - whole world is at 100%
+#
+# - write hexviews for wind and water flow. Use label to draw arrow in the direction of the flow, and color to show the speed
+#       ^ implement it as an "overlay", a second tab menu, where you can select an overlay mode: wind, water flow, or none
+# ALSO:
 # - write alternative, simplified versions of every calculation
 # - define which version to use in the config, using string labels (e.g. "basic")
 # - set them all to "basic", and try simulating based on that

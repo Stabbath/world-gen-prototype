@@ -2,6 +2,7 @@ WHITE  = (255,255,255)
 BLACK  = (0,0,0)
 RED    = (255,0,0)
 YELLOW = (255,255,0)
+PALE_YELLOW = (255,255,153)
 BLUE   = (0, 0, 255)
 OCEAN  = (32, 128, 255)
 PURPLE = (128, 0, 128)
@@ -33,6 +34,46 @@ def interpolate_color(value, stops):
                 int(color[j] + ratio * (next_color[j] - color[j])) for j in range(3)
             )
     return stops[-1][1]  # Fallback to the last color if something goes wrong
+
+def color_clouds(viewTile, config):
+    cloud_content = viewTile.tile.grid.climate_data[viewTile.tile.id]['cloud_content']
+    max_cloud_content = config['climate']['cloud_content_for_max_density']
+    value = cloud_content / max_cloud_content * 0.5 # halved, so we can see overloaded clouds through the color stops, for debugging
+
+    color_stops = [
+        (0.0, BLUE),
+        (0.5, WHITE),
+        (1.0, BLACK)
+    ]
+    color = interpolate_color(value, color_stops)
+    return color, color, BLACK
+
+def color_humidity(viewTile, config):
+    humidity = viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_content'] / viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity']
+    value = min(1.0, humidity)
+
+    color_stops = [
+        (0.0, RED),
+        (0.5, PALE_YELLOW),
+        (1.0, BLUE)
+    ]
+    color = interpolate_color(value, color_stops)
+    return color, color, BLACK
+
+def color_pressure(viewTile, config):
+    min_pressure = 81325 # approximate, assuming sea level is normally around 101325 Pa
+    max_pressure = 121325 # approximate, assuming sea level is normally around 101325 Pa
+
+    pressure = viewTile.tile.grid.climate_data[viewTile.tile.id]['air_pressure']
+    value = min(0.0, max(1.0, (pressure - min_pressure)/(max_pressure - min_pressure)))
+
+    color_stops = [
+        (0.0, BLUE), # LOW PRESSURE
+        (0.5, WHITE), # MID
+        (1.0, RED)  # HIGH PRESSURE
+    ]
+    color = interpolate_color(value, color_stops)
+    return color, color, BLACK
 
 def color_temperature(viewTile, config):
     max_temperature = 50
