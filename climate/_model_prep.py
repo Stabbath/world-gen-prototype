@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Oct 14 14:14:57 2024
-
-@author: Francisco
-"""
-
 import networkx as nx
 import matplotlib.pyplot as plt
 

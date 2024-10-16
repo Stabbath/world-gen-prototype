@@ -155,6 +155,7 @@ class HexGrid:
         self.height = height
         self.tiles = [None] * (width * height)
         self.func_neighbors = func_neighbors
+        self.climate_data = {}
         for row in range(height):
             for col in range(width):
                 self.tiles[col + row * self.width] = HexTile(col, row, self)

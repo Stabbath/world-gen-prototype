@@ -4,13 +4,14 @@ import sys
 import traceback
 from camera import Camera
 from hex_view import HexView
-from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults
+from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults, color_biomass
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
 from config import default_config, ui_fields as UI_FIELDS
 #from config_panel import ConfigPanel
 from config_filer import update_config_from_file, config_to_file
 from view_tabs import TabPanel
+from climate import generate_climate
 
 # ------------------------------
 # Constants and Configurations
@@ -42,13 +43,14 @@ MIN_ZOOM = 0.1   # Reduced minimum zoom level to allow more zooming out
 MAX_ZOOM = 3.0   # Maximum zoom level
 
 
-VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro"]
+VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro", "Biomass"]
 
 def full_gen(config):
     # NOTE - this is kind of a bandaid to simplify logic.
     # The UI was a pain in the ass, so now we read and re-read the config from a json file whenever we want to generate a map
     update_config_from_file(config)
     hex_grid = gen_world(config)
+    hex_grid.climate_data = generate_climate(hex_grid, config)
     hex_views = gen_views(config, hex_grid)
     return hex_grid, hex_views
 
@@ -58,7 +60,8 @@ def gen_views(config, hex_grid):
         "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, config=config, offset_x=100, offset_y=100),
         "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, config=config, offset_x=100, offset_y=100),
         "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, config=config, offset_x=100, offset_y=100),
-        "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100)
+        "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100),
+        "Biomass": HexView(hex_grid, size=HEX_SIZE, func_color=color_biomass, config=config, offset_x=100, offset_y=100)
     }
     return hex_views
 

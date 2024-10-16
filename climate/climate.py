@@ -366,7 +366,7 @@ def calculate_evapotranspiration(config, biomass, temperature, vapor_content, va
 
     relative_humidity = min(1.0, vapor_content / vapor_capacity)
     temperature_factor = max(0.0, temperature / transpiration_reference_temperature) # assuming linear for now
-    transpiration_loss_per_biomass = transpiration_rate * (1.0 - humidity_factor) * temperature_factor 
+    transpiration_loss_per_biomass = transpiration_rate * (1.0 - relative_humidity) * temperature_factor 
     transpiration_loss_per_biomass = math.min(transpiration_loss_per_biomass, 1.0) # can't lose more water than you have
     transpiration_loss = transpiration_loss_per_biomass * biomass
     return transpiration_loss
