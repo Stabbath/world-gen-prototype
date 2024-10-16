@@ -2,12 +2,13 @@ import math
 
 
 # === GENERAL TODO NOTES ===
+# TODO - maybe have to redefine cloud density as cloud vapor content, and model it as vapor going from the air to the clouds
 # TODO - think about Albedo
 # TODO - temperature should be tracked as average, minimum, and maximum, probably.
 # TODO - if the map takes too long to stabilize, we can consider adding neighbor smoothing during the generation of the climate (probably not during gameplay)
 # TODO - add soil quality/minerals as a factor in plant growth (and beyond)
-# TODO - add roughness of terrain as a factor in wind speed (and beyond)
-
+# TODO - add roughness of terrain as a factor in wind friction (and beyond)
+# TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
 
 # === UTILS ===
 def is_sea_tile(tile, config):
@@ -86,6 +87,8 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
 config = {}
 config['climate'] = {}
 config['climate']['max_iterations'] = 100
+config['climate']['smoothen_temperature_map'] = True
+config['climate']['temperature_smoothing_self_weight'] = 3
 config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
 config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
 config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
@@ -119,6 +122,18 @@ config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant t
 config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
 config['climate']['cloud_density_to_water_ratio'] = 0.1 #           : ratio to convert cloud density into rain
 config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
+config['climate']['wind_friction_altitude'] = 0.0005    #           : how much friction is added per meter of altitude difference
+config['climate']['wind_friction_biomass'] = 0.0005     #           : how much friction is added per kg of biomass per surface
+config['climate']['specific_gas_constant_for_air'] = 287.058 # J/(kg.K) : specific gas constant for dry air
+config['climate']['planet_angular_velocity'] = 0.000072921 # rad / s : angular velocity of the planet
+config['climate']['winds_max_vapor_transfer_speed'] = 10 # m/s      : wind speed required to transfer all of the appropriate variable out of a tile
+config['climate']['winds_max_cloud_transfer_speed'] = 25 # m/s      : ""
+config['climate']['winds_max_pressure_transfer_speed'] = 30 # m/s   : ""
+config['climate']['winds_max_temperature_transfer_speed'] = 15 # m/s : ""
+config['climate']['winds_max_vapor_transfer_ratio'] = 0.5 #         : how much of the variable is transferred by the wind at max wind
+config['climate']['winds_max_cloud_transfer_ratio'] = 0.6 #         : ""
+config['climate']['winds_max_pressure_transfer_ratio'] = 0.05 #     : ""
+config['climate']['winds_max_temperature_transfer_ratio'] = 0.1 #   : ""
 
 
 # === CLIMATE VARIABLES === 
@@ -137,6 +152,25 @@ units = {
     "biomass": "kg/m^2", # Average biomass per unit of surface area
     "plant_humidity_absorption": "kg/m^2/s" # Water taken in by plants directly from the atmosphere
 }
+
+
+# === SMOOTHING ===
+def smoothen_temperature(grid, config, state, prev_state):
+    weight = config['climate']['temperature_smoothing_self_weight']
+
+    # calculate smoothed temperature map
+    temperature_map = {}
+    for tile in grid.tiles:
+        temperature_sum = weight * state[tile.id]['temperature']
+        temperature_count = weight
+        for neighbor in tile.get_neighbors():
+            temperature_sum += state[neighbor.id]['temperature']
+            temperature_count += 1
+        temperature_map[tile.id] = temperature_sum / temperature_count
+    
+    # mutate state
+    for tile in grid.tiles:
+        state[tile.id]['temperature'] = temperature_map[tile.id]
 
 
 # === BASIC CALCULATION FUNCTIONS ===
@@ -469,9 +503,11 @@ def all_cloud_density(grid, config, state, prev_state):
 
 # === DISTRIBUTION FUNCTIONS ===
 def all_wind(grid, config, state, prev_state):
-    SPECIFIC_GAS_CONSTANT_FOR_AIR = 287.058 # specific gas constant for dry air 
-    PLANET_ANGULAR_VELOCITY = 0.000072921 # rad / s
-    
+    specific_gas_constant_for_air = config['climate']['specific_gas_constant_for_air']
+    planet_angular_velocity = config['climate']['planet_angular_velocity']
+    wind_friction_altitude = config['climate']['wind_friction_altitude']
+    wind_friction_biomass = config['climate']['wind_friction_biomass']
+
     for tile in grid.tiles:
         air_pressure = state[tile.id]['air_pressure']
         
@@ -487,59 +523,92 @@ def all_wind(grid, config, state, prev_state):
             pressure_gradient[0] += vector[0]
             pressure_gradient[1] += vector[1]
         
-        air_density = air_pressure / (SPECIFIC_GAS_CONSTANT_FOR_AIR * state[tile.id]['temperature'])
+        air_density = air_pressure / (specific_gas_constant_for_air * state[tile.id]['temperature'])
 
         # finally, we calculate the geostrophic wind, to account for the coriolis effect
         # geostrophic wind is an approximation of the wind speed, which considers the coriolis effect and pressure gradient force to be in equilibrium
         # this is great because it accounts for the coriolis effect while also simplifying away the PGF and yielding a nice direct wind speed
         latitude = normalized_latitude(tile) * math.pi / 2
-        coriolis_parameter = 2 * PLANET_ANGULAR_VELOCITY * math.sin(latitude)
+        coriolis_parameter = 2 * planet_angular_velocity * math.sin(latitude)
         k = 1 / (coriolis_parameter * air_density)
         # this is in m/s
         geostrophic_wind = (pressure_gradient[0] * k, pressure_gradient[1] * k) 
         
         state[tile.id]['wind'] = geostrophic_wind
-        magnitude = math.sqrt(geostrophic_wind[0] ** 2 + geostrophic_wind[1] ** 2)
 
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
         (neighbor1, ratio1), (neighbor2, ratio2) = vector_to_flat_hex_neighbors_and_ratio
-        state[tile.id]['wind1'] = magnitude * ratio1
+        state[tile.id]['wind1'] = ratio1
         state[tile.id]['wind1_neighbor'] = neighbor1
         if (neighbor2): # it's possible to point straight to the center and therefore have only one downwind neighbor here
-            state[tile.id]['wind2'] = magnitude * ratio2
+            state[tile.id]['wind2'] = ratio2
             state[tile.id]['wind2_neighbor'] = neighbor2
         
         # winds are slowed down by friction
-        # TODO - tiles should have a variable indicating how rough the terrain is, which would also have an impact here
         friction = 0.0
         # - however, this is a minor effect at a large scale. But still something I want to include
         # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
-        friction += (neighbor1.altitude - tile.altitude) * 0.0005 # we're assuming every 100m difference is 0.05 friction
+        friction += (neighbor1.altitude - tile.altitude) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
         # but forests also have an effect, so let's look at biomass on this tile
-        friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass']) * 0.0005 # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
+        friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
         # and we apply the friction
         state[tile.id]['wind1'] *= (1.0 - friction)
         if 'wind2' in state[tile.id]:
             friction = 0.0
-            friction += (neighbor2.altitude - tile.altitude) * 0.0005
-            friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass']) * 0.0005 # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
+            friction += (neighbor2.altitude - tile.altitude) * wind_friction_altitude
+            friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
             state[tile.id]['wind2'] *= (1.0 - friction)
 
 def distribution_wind(grid, config, state, prev_state):
     # queue = every tile on the map, sorted by air pressure (lowest first)
-    # variables to use:
-    # state[tile.id]['wind1'] and state[tile.id]['wind2'] - the wind strength outwards from a tile (second one may not exist)
-    # state[tile.id]['wind1_neighbor'] and state[tile.id]['wind2_neighbor'] - the neighbors the winds are flowing into
-    # state[tile.id]['temperature'] - one of the variables to distribute
-    # state[tile.id]['air_pressure'] - one of the variables to distribute
-    # state[tile.id]['vapor_content'] - one of the variables to distribute
-    # state[tile.id]['cloud_density'] - one of the variables to distribute
+    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['air_pressure'])
 
-    # iteratively:
-        # pop queue
-        # ???
-        # profit
-    pass # TODO
+    while queue:
+        tile = queue.pop(0)
+
+        # get calculated winds 
+        neighbors = [(state[tile.id]['wind1_neighbor'], state[tile.id]['wind1'])]
+        if 'wind2_neighbor' in state[tile.id]:
+            neighbors.append((state[tile.id]['wind2_neighbor'], state[tile.id]['wind2']))
+
+        # get wind magnitude
+        combined_wind = state[tile.id]['wind']
+        combined_wind = math.sqrt(combined_wind[0] ** 2 + combined_wind[1] ** 2)
+
+        # calculate how much of each variable to distribute
+        vapor_out = state[tile.id]['vapor_content'] * combined_wind / config['climate']['winds_max_vapor_transfer_speed'] * config['climate']['winds_max_vapor_transfer_ratio']
+        cloud_out = state[tile.id]['cloud_density'] * combined_wind / config['climate']['winds_max_cloud_transfer_speed'] * config['climate']['winds_max_cloud_transfer_ratio']
+
+        # pressure_out_percent = combined_wind / config['climate']['winds_max_pressure_transfer_speed'] * config['climate']['winds_max_pressure_transfer_ratio']
+        # temperature_out_percent = combined_wind / config['climate']['winds_max_temperature_transfer_speed'] * config['climate']['winds_max_temperature_transfer_ratio']
+        # self_adjust_pressure = 0
+        # self_adjust_temperature = 0
+
+        # distribute temperature, air pressure, vapor content and clouds
+        for neighbor, ratio in neighbors:
+            vapor_transfer = vapor_out * ratio
+            state[neighbor.id]['vapor_content'] += vapor_transfer
+            cloud_transfer = cloud_out * ratio
+            state[neighbor.id]['cloud_density'] += cloud_transfer
+
+            # # Temperature
+            # # We transfer a percentage of the temperature *difference*
+            # temperature_difference = state[tile.id]['temperature'] - state[neighbor.id]['temperature']
+            # temperature_transfer = temperature_difference * temperature_out_percent * ratio
+            # state[neighbor.id]['temperature'] += temperature_transfer
+            # self_adjust_temperature += temperature_transfer
+
+            # # Air pressure
+            # # We transfer a percentage of the pressure *difference*
+            # pressure_difference = state[tile.id]['air_pressure'] - state[neighbor.id]['air_pressure']
+            # pressure_transfer = pressure_difference * pressure_out_percent * ratio
+            # state[neighbor.id]['air_pressure'] += pressure_transfer
+            # self_adjust_pressure += pressure_transfer
+
+        state[tile.id]['vapor_content'] -= vapor_out
+        state[tile.id]['cloud_density'] -= cloud_out
+        # state[tile.id]['temperature'] -= self_adjust_temperature
+        # state[tile.id]['air_pressure'] -= self_adjust_pressure
 
 def distribution_water_flow(grid, config, state, prev_state):
     # calculate every tile's precipitation and initial water flow
@@ -552,13 +621,23 @@ def distribution_water_flow(grid, config, state, prev_state):
             state[tile.id]['cloud_density']
         )
 
-        # adjust cloud density and vapor content based on how much it rained
-        # maybe temperature too?
-        # and of course, adjust water flow. Note that sea tiles will have max water flow automatically
-        pass # TODO
-        
+        # adjust vapor content and set water flow based on how much it rained
+        # these, along with precipitation, are all referenced in kg per area, so it's a straight conversion
+        # NOTE: technically, water_flow is per area and per second, but we're ignore the per second part for now, we could take any time reference we wanted, since we never actually work with time
+        state[tile.id]['vapor_content'] -= state[tile.id]['precipitation']
+        if not is_sea_tile(tile, config): # sea tiles don't have water flow
+            state[tile.id]['water_flow'] = state[tile.id]['precipitation']
+
+        # cloud density is adjusted based on the change in vapor content
+        state[tile.id]['cloud_density'] = calculate_cloud_density(
+            config,
+            state[tile.id]['cloud_density'],
+            state[tile.id]['vapor_content'],
+            state[tile.id]['vapor_capacity']
+        )
+
     # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
-    queue = sorted([tile for tile in grid.tiles if tile.altitude > config["sea_level"]], key=lambda tile: tile.altitude, reverse=True)
+    queue = sorted([tile for tile in grid.tiles if not is_sea_tile(tile)], key=lambda tile: tile.altitude, reverse=True)
     while queue:
         tile = queue.pop(0)
 
@@ -575,7 +654,7 @@ def distribution_water_flow(grid, config, state, prev_state):
 
 # === MAIN FUNCTIONS ===
 # iterative method:
-# input: prev_state, latitude, solar_constant, is_sea_tile, geothermal_constant, altitude
+# input: config, prev_state, latitude, is_sea_tile, altitude
 # 1. source calculations (based on prev state)
 #   1.1 solar radiation - from previous state's cloud density (its not too important to have the most accurate factor here)
 #   1.2 biomass
@@ -614,6 +693,8 @@ def iterate_climate(grid, config, prev_state):
     
     # fresh variables - based on variables from this same state
     all_temperature(grid, config, state, prev_state)
+    if config['climate']['smoothen_temperature_map']:
+        smoothen_temperature(grid, config, state, prev_state)
     all_air_pressure(grid, config, state, prev_state)
     all_vapor_capacity(grid, config, state, prev_state)
     all_vapor_content(grid, config, state, prev_state) # this one also depends on prev_state, but only on itself
@@ -622,18 +703,12 @@ def iterate_climate(grid, config, prev_state):
     # calculate wind
     all_wind(grid, config, state, prev_state)
     # distribute stuff via wind
-    # TODO - need to figure out how to do it exactly
-    # note we need to use wind1, wind1_neighbor, wind2, and wind2_neighbor
+    distribution_wind(grid, config, state, prev_state)
     
-    # calculate precipitation, adjust cloud density
-#    "precipitation": ["prev_vapor_content", "prev_vapor_capacity", "prev_cloud_density"],
-# TODO
-    # distribute water flow throughout the world
-#    "water_flow": ["precipitation", "is_sea_tile"],
-# TODO
+    # calculate precipitation, adjust cloud density, distribute water flow throughout the world
+    distribution_water_flow(grid, config, state, prev_state)
 
 def starting_state(grid, config):
-    # each of the functions mutates state directly
     state = init_state(grid)
     
     #           (is required means it's needed for the first iteration)
