@@ -4,7 +4,7 @@ import sys
 import traceback
 from camera import Camera
 from hex_view import HexView
-from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults, color_biomass
+from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults, color_biomass, color_temperature
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
 from config import default_config, ui_fields as UI_FIELDS
@@ -43,7 +43,7 @@ MIN_ZOOM = 0.1   # Reduced minimum zoom level to allow more zooming out
 MAX_ZOOM = 3.0   # Maximum zoom level
 
 
-VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro", "Biomass"]
+VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro", "Temperature", "Biomass"]
 
 def full_gen(config):
     # NOTE - this is kind of a bandaid to simplify logic.
@@ -61,6 +61,7 @@ def gen_views(config, hex_grid):
         "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, config=config, offset_x=100, offset_y=100),
         "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, config=config, offset_x=100, offset_y=100),
         "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100),
+        "Temperature": HexView(hex_grid, size=HEX_SIZE, func_color=color_temperature, config=config, offset_x=100, offset_y=100),
         "Biomass": HexView(hex_grid, size=HEX_SIZE, func_color=color_biomass, config=config, offset_x=100, offset_y=100)
     }
     return hex_views

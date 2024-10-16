@@ -78,7 +78,6 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
             coords2 = (q2, r2)
             first_neighbor = tile.grid.get_tile(coords1[0], coords1[1])
             second_neighbor = tile.grid.get_tile(coords2[0], coords2[1])
-            print('COORDS:', coords1, coords2, "RATIO", ratio)
             
             return first_neighbor, ratio, second_neighbor, 1 - ratio
     
@@ -800,7 +799,6 @@ def generate_climate(grid, config):
     state = starting_state(grid, config)
 
     for i in range(CLIMATE_MAX_ITER):
-        print('ITERATION', i)
         prev_state = state
         state = iterate_climate(grid, config, prev_state)
 

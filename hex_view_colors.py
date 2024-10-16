@@ -2,6 +2,7 @@ WHITE  = (255,255,255)
 BLACK  = (0,0,0)
 RED    = (255,0,0)
 YELLOW = (255,255,0)
+BLUE   = (0, 0, 255)
 OCEAN  = (32, 128, 255)
 
 # Colors (default values)
@@ -32,12 +33,28 @@ def interpolate_color(value, stops):
             )
     return stops[-1][1]  # Fallback to the last color if something goes wrong
 
+def color_temperature(viewTile, config):
+    max_temperature = 50
+    min_temperature = -50
+
+    temperature = viewTile.tile.grid.climate_data[viewTile.tile.id]['temperature']
+    value = (min(max_temperature, max(min_temperature, temperature)) - min_temperature) / (max_temperature - min_temperature)
+    
+    color_stops = [
+        (0.0, BLUE),  # COLD
+        (0.5, WHITE), # cold but mid (intended to be 0º)
+        (1.0, RED)   # HOT
+    ]
+    color = interpolate_color(value, color_stops)
+    return color, color, BLACK
+    
 def color_biomass(viewTile, config):
     if viewTile.tile.altitude <= config['sea_level']:
         return OCEAN, OCEAN, BLACK
     
     max_biomass = 50 # NOTE: biomass might exceed this, just trying to empirically set a reasonable maximum
-    biomass = min(1.0, viewTile.tile.grid.climate_data[viewTile.tile.id]['biomass']/max_biomass)
+    biomass = viewTile.tile.grid.climate_data[viewTile.tile.id]['biomass']
+    value = min(1.0, biomass/max_biomass)
     # Color gradient: dark green -> light green -> yellow -> ochre
     color_stops = [
         (0.0, (204, 119, 34)),  # Ochre (barren)
@@ -45,7 +62,7 @@ def color_biomass(viewTile, config):
         (0.75, (173, 255, 47)), # Light green
         (1.0, (0, 100, 0))   # Dark green (lush)
     ]
-    color = interpolate_color(biomass, color_stops)
+    color = interpolate_color(value, color_stops)
     return color, color, BLACK
 
 def color_plates(viewTile, config):
