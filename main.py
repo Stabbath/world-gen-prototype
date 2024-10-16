@@ -46,14 +46,27 @@ MAX_ZOOM = 3.0   # Maximum zoom level
 VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro", "Temperature", "Biomass"]
 
 def full_gen(config):
+    print('Generating everything...')
     # NOTE - this is kind of a bandaid to simplify logic.
     # The UI was a pain in the ass, so now we read and re-read the config from a json file whenever we want to generate a map
     update_config_from_file(config)
     hex_grid = gen_world(config)
-    hex_grid.climate_data = generate_climate(hex_grid, config)
+    hex_grid.climate_data = gen_climate(config, hex_grid)
+    print('Done')
     hex_views = gen_views(config, hex_grid)
     return hex_grid, hex_views
 
+def gen_climate(config, hex_grid):
+    return generate_climate(hex_grid, config)
+
+def regen_climate(config, hex_grid):
+    print('Regenerating climate...')
+    update_config_from_file(config)
+    hex_grid.climate_data = generate_climate(hex_grid, config)
+    print('Done')
+    hex_views = gen_views(config, hex_grid)
+    return hex_views
+    
 def gen_views(config, hex_grid):
     # HexViews for different tabs
     hex_views = {
@@ -174,7 +187,10 @@ def main():
                     if event.key == pygame.K_r:
                         # Regenerate the map with current settings
                         hex_grid, hex_views = full_gen(config)
-        
+                    elif event.key == pygame.K_c:
+                        # Regenerate climate with current settings
+                        hex_views = regen_climate(config, hex_grid)
+
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
         
