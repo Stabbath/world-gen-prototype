@@ -22,6 +22,9 @@ import math
 # TODO - after that, fix biomass
 
 # === UTILS ===
+def altitude_from_sea_level(config, altitude):
+    return max(0, altitude - config["sea_level"]) # we're not simulating the ocean currently, so we never need to know the depth of a tile, so min = 0
+
 def is_sea_tile(tile, config):
     return tile.altitude <= config["sea_level"]
 
@@ -321,7 +324,7 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
 
 # temperature in Celsius
 def calculate_temperature(config, altitude, solar_radiation):
-    altitude = max(0, altitude - config['sea_level']) # altitude from sea level
+    altitude = altitude_from_sea_level(config, altitude)
     temperature_lapse_rate = config['climate']['temperature_lapse_rate']
     geothermal_constant = config['climate']['geothermal_constant']
     reference_temperature = config['climate']['reference_temperature']
@@ -367,7 +370,7 @@ def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SE
     return calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
 
 def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
-    altitude = max(0, altitude - config['sea_level']) # altitude from sea level
+    altitude = altitude_from_sea_level(config, altitude)
     g = config['climate']['g']
     planet_molar_mass = config['climate']['planet_molar_mass']
     universal_gas_constant = config['climate']['universal_gas_constant']
@@ -582,14 +585,14 @@ def all_wind(grid, config, state, prev_state):
         friction = 0.0
         # - however, this is a minor effect at a large scale. But still something I want to include
         # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
-        friction += (neighbor1.altitude - tile.altitude) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
+        friction += (altitude_from_sea_level(config, neighbor1.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
         # but forests also have an effect, so let's look at biomass on this tile
         friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
         # and we apply the friction
         state[tile.id]['wind1'] *= (1.0 - friction)
         if 'wind2' in state[tile.id]:
             friction = 0.0
-            friction += (neighbor2.altitude - tile.altitude) * wind_friction_altitude
+            friction += (altitude_from_sea_level(config, neighbor2.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude
             friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
             state[tile.id]['wind2'] *= (1.0 - friction)
 
