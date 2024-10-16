@@ -14,6 +14,8 @@ import math
 # - fix air pressure, it's currently dropping below the generous hexview minimums, on the whole map
 # - fix clouds too - they are beyond overcharged
 # - fix humidity - whole world is at 100%
+# - fix biomass
+# * WHILE FIXING THE ABOVE * - look at the note below under "ALSO"
 #
 # - write hexviews for wind and water flow. Use label to draw arrow in the direction of the flow, and color to show the speed
 #       ^ implement it as an "overlay", a second tab menu, where you can select an overlay mode: wind, water flow, or none
@@ -26,7 +28,6 @@ import math
 # - no evapotranspiration
 # - no water humidity absorption
 # ... what else ?
-# TODO - after that, fix biomass
 
 # === UTILS ===
 def altitude_from_sea_level(config, altitude):
@@ -39,7 +40,7 @@ def normalized_latitude(tile):
     # 1. calculate distance from equator
     max_latitude = tile.grid.height / 2
     latitude = max_latitude - tile.row
-    if tile.col % 2 == 0: # because every 2nd column is down half a tile compared to the first, since they're tiles and flat-topped
+    if tile.col % 2 == 1: # because every 2nd column is down half a tile compared to the first, since they're tiles and flat-topped
         latitude -= 0.5
     latitude = latitude / max_latitude
     return latitude
