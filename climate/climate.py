@@ -10,6 +10,19 @@ import math
 # TODO - add roughness of terrain as a factor in wind friction (and beyond)
 # TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
 
+# TODO - IMPORTANT 
+# - fix wind, its causing all of the landmasses to heat up a lot for some reason
+
+# TODO - IMPORTANT - NEXT STEPS
+# - write alternative, simplified versions of every calculation
+# - define which version to use in the config, using string labels (e.g. "basic")
+# - set them all to "basic", and try simulating based on that
+# implementation guide for "basic" calculations:
+# - no evaporation
+# - no evapotranspiration
+# - no water humidity absorption
+# ... what else ?
+
 # === UTILS ===
 def is_sea_tile(tile, config):
     return tile.altitude <= config["sea_level"]
@@ -98,7 +111,7 @@ def default_climate_config():
     config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
     config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
     config['climate']['reference_radiation'] = 1361         # W/m^2     : the radiation which will give the equator the reference_temperature
-    config['climate']['cloud_reduction_factor'] = 0.8       #           : how much a cloud density of 1.0 reduces incoming solar radiation by
+    config['climate']['cloud_reduction_factor'] = 0.1       #           : how much a cloud density of 1.0 reduces incoming solar radiation by
     config['climate']['solar_constant'] = 1361              # W/m^2     : average solar energy received per unit area at the top of the atmosphere / at the equator
     config['climate']['relative_humidity_precipitation_threshold'] = 0.85 # % : how much relative humidity we need for it to cause precipitation
     config['climate']['precipitation_rate_multiplier'] = 1  #           : factor to multiply precipitation rate by
@@ -213,7 +226,9 @@ def calculate_solar_radiation_init(config, normalized_latitude):
 
 def calculate_solar_radiation(config, normalized_latitude, cloud_density):
     cloud_reduction_factor = config['climate']['cloud_reduction_factor']
-    return calculate_solar_radiation_init(config, normalized_latitude) * (1.0 - cloud_density * cloud_reduction_factor)
+    incoming_radiation = calculate_solar_radiation_init(config, normalized_latitude)
+    radiation = incoming_radiation * (1.0 - cloud_density * cloud_reduction_factor)
+    return radiation
 
 def calculate_cloud_density_init(config, vapor_content, vapor_capacity):
     humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
@@ -299,10 +314,12 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     growth_factor *= temperature_factor
     
     biomass = prev_biomass * (1.0 + growth_factor)
+    biomass = max(0, biomass)
     return biomass
 
 # temperature in Celsius
 def calculate_temperature(config, altitude, solar_radiation):
+    altitude = max(0, altitude - config['sea_level']) # altitude from sea level
     temperature_lapse_rate = config['climate']['temperature_lapse_rate']
     geothermal_constant = config['climate']['geothermal_constant']
     reference_temperature = config['climate']['reference_temperature']
@@ -348,6 +365,7 @@ def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SE
     return calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
 
 def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
+    altitude = max(0, altitude - config['sea_level']) # altitude from sea level
     g = config['climate']['g']
     planet_molar_mass = config['climate']['planet_molar_mass']
     universal_gas_constant = config['climate']['universal_gas_constant']
@@ -437,8 +455,8 @@ def all_temperature(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['temperature'] = calculate_temperature(
             config,
-            state[tile.id]['solar_radiation'],
-            tile.altitude
+            tile.altitude,
+            state[tile.id]['solar_radiation']
         )
 
 def all_air_pressure(grid, config, state, prev_state):
@@ -725,7 +743,7 @@ def iterate_climate(grid, config, prev_state):
     # distribute stuff via wind
     distribution_wind(grid, config, state, prev_state)
     
-    # calculate precipitation, adjust cloud density, distribute water flow throughout the world
+    # # calculate precipitation, adjust cloud density, distribute water flow throughout the world
     distribution_water_flow(grid, config, state, prev_state)
 
     return state

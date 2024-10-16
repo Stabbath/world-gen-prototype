@@ -20,8 +20,8 @@ def default_config():
     config = {
         "max_altitude": 20000,
         "sea_level": 10000,
-        "width": 10,
-        "height": 10
+        "width": 40,
+        "height": 30
     }
     config['gen_method'] = 'plates'
     
