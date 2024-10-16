@@ -26,12 +26,12 @@ def default_config():
     config['gen_method'] = 'plates'
     
     config['plates'] = {}
-    config['plates']['gen_plate_count'] = 3
+    config['plates']['gen_plate_count'] = 4
     config['plates']['altitude_gen_method'] = 'generator_consumer'
     config['plates']['individual_spread'] = True
     config['plates']['random_pop'] = False
     config['plates']['fault_smoothing'] = True
-    config['plates']['merge_plates_count'] = 48
+    config['plates']['merge_plates_count'] = 0
     
     config['faults'] = {}
     config['faults']['n_selected_tiles'] = 3

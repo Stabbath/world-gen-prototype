@@ -40,13 +40,13 @@ def color_biomass(viewTile, config):
     biomass = min(1.0, viewTile.tile.grid.climate_data[viewTile.tile.id]['biomass']/max_biomass)
     # Color gradient: dark green -> light green -> yellow -> ochre
     color_stops = [
-        (0.0, (204, 119, 34))  # Ochre (barren)
+        (0.0, (204, 119, 34)),  # Ochre (barren)
         (0.5, (255, 255, 0)), # Yellow
         (0.75, (173, 255, 47)), # Light green
-        (1.0, (0, 100, 0)),   # Dark green (lush)
+        (1.0, (0, 100, 0))   # Dark green (lush)
     ]
     color = interpolate_color(biomass, color_stops)
-    return color
+    return color, color, BLACK
 
 def color_plates(viewTile, config):
     if viewTile.tile.plate_index is not None:

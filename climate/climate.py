@@ -80,12 +80,12 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
             second_neighbor = tile.grid.get_tile(coords2[0], coords2[1])
             print('COORDS:', coords1, coords2, "RATIO", ratio)
             
-            return ((first_neighbor, ratio), (second_neighbor, 1 - ratio))
+            return first_neighbor, ratio, second_neighbor, 1 - ratio
     
     # Handle edge case if the angle is exactly aligned with one direction
     coords = (q + AXIAL_DIRECTIONS[0][0], r + AXIAL_DIRECTIONS[0][1])
     neighbor = tile.grid.get_tile(coords[0], coords[1])
-    return (neighbor, 1.0)
+    return neighbor, 1.0
 
 
 # === CONFIG CONSTANTS ===
@@ -296,7 +296,7 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     growth_factor = min(water_factor, energy_factor, mineral_factor)
     
     # growth also depends on temperature. A certain range of temperatures is probably ideal for growth, and growth probably slows down if it's too hot, and definitely if it's too cold.
-    temperature_factor = _temperature_growth_factor(temperature)
+    temperature_factor = _temperature_growth_factor(config, temperature)
     growth_factor *= temperature_factor
     
     biomass = prev_biomass * (1.0 + growth_factor)
@@ -393,7 +393,7 @@ def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_
         water_temperature_constant = config['climate']['water_temperature_constant_ocean']
     else:
         water_temperature_multiplier = config['climate']['water_temperature_multiplier']
-        water_temperature_constant = config['climate']['water_temperature']
+        water_temperature_constant = config['climate']['water_temperature_constant']
     ocean_water_flow_equivalent = config['climate']['ocean_water_flow_equivalent']
 
     water_temperature = water_temperature_multiplier * temperature + water_temperature_constant
@@ -414,8 +414,6 @@ def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransp
 # === ITERATIVE FUNCTIONS ===
 def all_solar_radiation(grid, config, state, prev_state):
     for tile in grid.tiles:
-        print('TILE', tile.id)
-        print('PREV STATE', prev_state)
         latitude = normalized_latitude(tile)
         state[tile.id]['solar_radiation'] = calculate_solar_radiation(
             config,
@@ -533,7 +531,8 @@ def all_wind(grid, config, state, prev_state):
             pressure_gradient[0] += vector[0]
             pressure_gradient[1] += vector[1]
         
-        air_density = air_pressure / (specific_gas_constant_for_air * state[tile.id]['temperature'])
+        # TODO - temp fix, because we're getting values too close to 0 when calculating manually
+        air_density = 1.225 # air_pressure / (specific_gas_constant_for_air * state[tile.id]['temperature'])
 
         # finally, we calculate the geostrophic wind, to account for the coriolis effect
         # geostrophic wind is an approximation of the wind speed, which considers the coriolis effect and pressure gradient force to be in equilibrium
@@ -548,13 +547,17 @@ def all_wind(grid, config, state, prev_state):
         state[tile.id]['wind'] = geostrophic_wind
 
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
-        print(vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind))
-        (neighbor1, ratio1), (neighbor2, ratio2) = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
+        result = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
+        neighbor1, ratio1, neighbor2, ratio2 = result + (None, 0) if len(result) == 2 else result
         state[tile.id]['wind1'] = ratio1
         state[tile.id]['wind1_neighbor'] = neighbor1
         if (neighbor2): # it's possible to point straight to the center and therefore have only one downwind neighbor here
             state[tile.id]['wind2'] = ratio2
             state[tile.id]['wind2_neighbor'] = neighbor2
+        
+        # sometimes even our only neighbor migh be None: if we get a wind straight up into the pole, for example
+        if not neighbor1:
+            continue
         
         # winds are slowed down by friction
         friction = 0.0
@@ -578,8 +581,12 @@ def distribution_wind(grid, config, state, prev_state):
     while queue:
         tile = queue.pop(0)
 
+        if not state[tile.id]['wind1_neighbor']: # if there's no wind, skip
+            continue
+    
         # get calculated winds 
         neighbors = [(state[tile.id]['wind1_neighbor'], state[tile.id]['wind1'])]
+                
         if 'wind2_neighbor' in state[tile.id]:
             neighbors.append((state[tile.id]['wind2_neighbor'], state[tile.id]['wind2']))
 
