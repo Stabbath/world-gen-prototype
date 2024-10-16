@@ -138,7 +138,7 @@ def default_climate_config():
     config['climate']['water_temperature_multiplier_ocean'] = 0.4 # C   : factor to multiply temperature by to obtain water temperature; for the ocean
     config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant to add to temperature to obtain water temperature; for the ocean
     config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
-    config['climate']['cloud_density_to_water_ratio'] = 0.1 #           : ratio to convert cloud density into rain
+    config['climate']['cloud_content_for_max_density'] = 10 #           : ratio to convert cloud content into cloud density to determine radiation reduction etc
     config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
     config['climate']['wind_friction_altitude'] = 0.0005    #           : how much friction is added per meter of altitude difference
     config['climate']['wind_friction_biomass'] = 0.0005     #           : how much friction is added per kg of biomass per surface
@@ -155,6 +155,7 @@ def default_climate_config():
     return config
 
 # === CLIMATE VARIABLES === 
+# Everything is a yearly/undefined epoch average
 units = {
     "solar_radiation": "W/m^2", # Average power per unit of surface area
     "water_flow": "kg/m^2/s", # Flow by weight per unit of surface area
@@ -165,7 +166,7 @@ units = {
     "evapotranspiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
     "air_pressure": "Pa",
     "wind": "m/s",
-    "cloud_density": "%", # 100% means every unit of surface area is covered by the thickest cloud possible
+    "cloud_content": "kg/m^2", # Amount of water in the clouds, per unit of surface area (yearly average)
     "precipitation": "kg/m^2", # Average rainfall volume per unit of surface area
     "biomass": "kg/m^2", # Average biomass per unit of surface area
     "plant_humidity_absorption": "kg/m^2/s" # Water taken in by plants directly from the atmosphere
@@ -214,32 +215,35 @@ def calculate_cyllindral_average_yearly_solar_radiation(config, normalized_latit
     # So the angle of incidence for solar radiation will be approximately the same for every point of the cyllinder
     return solar_constant
 
-def calculate_precipitation(config, vapor_content, vapor_capacity, cloud_density):
+def calculate_precipitation(config, vapor_content, vapor_capacity, cloud_content):
     relative_humidity_threshold = config['climate']['relative_humidity_precipitation_threshold']
     precipitation_rate_multiplier = config['climate']['precipitation_rate_multiplier']
     relative_humidity = vapor_content / vapor_capacity
     excess_humidity = max(0, relative_humidity  - relative_humidity_threshold)
-    return precipitation_rate_multiplier * cloud_density  * excess_humidity
+    return precipitation_rate_multiplier * cloud_content * excess_humidity
 
 def calculate_solar_radiation_init(config, normalized_latitude):
     return calculate_spherical_average_yearly_solar_radiation(config, normalized_latitude)
 
-def calculate_solar_radiation(config, normalized_latitude, cloud_density):
+def calculate_solar_radiation(config, normalized_latitude, cloud_content):
     cloud_reduction_factor = config['climate']['cloud_reduction_factor']
+    cloud_content_for_max_density = config['climate']['cloud_content_for_max_density']
     incoming_radiation = calculate_solar_radiation_init(config, normalized_latitude)
+    cloud_density = min(1.0, cloud_content/cloud_content_for_max_density)
     radiation = incoming_radiation * (1.0 - cloud_density * cloud_reduction_factor)
     return radiation
 
-def calculate_cloud_density_init(config, vapor_content, vapor_capacity):
+def calculate_cloud_content_init(config, vapor_content, vapor_capacity):
     humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
     relative_humidity = vapor_content / vapor_capacity
-    return max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
+    factor = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
+    return factor * vapor_content
 
-def calculate_cloud_density(config, prev_cloud_density, vapor_content, vapor_capacity, humidity_cloud_formation_threshold=0.75):
-    relative_humidity = (prev_cloud_density + vapor_content) / vapor_capacity
-    cloud_density = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
-    cloud_density = min(1, cloud_density + prev_cloud_density)
-    return cloud_density
+def calculate_cloud_content(config, prev_cloud_content, vapor_content, vapor_capacity):
+    humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
+    relative_humidity = vapor_content / vapor_capacity
+    factor = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
+    return factor * vapor_content + prev_cloud_content
 
 # Plant growth is maximum within a certain optimal range, and impossible beyond certain temperatures
 def _temperature_growth_factor(config, temperature): 
@@ -435,7 +439,7 @@ def all_solar_radiation(grid, config, state, prev_state):
         state[tile.id]['solar_radiation'] = calculate_solar_radiation(
             config,
             latitude, 
-            prev_state[tile.id]['cloud_density']
+            prev_state[tile.id]['cloud_content']
         )
 
 def all_biomass(grid, config, state, prev_state):
@@ -516,11 +520,11 @@ def all_plant_humidity_absorption(grid, config, state, prev_state):
             prev_state[tile.id]['vapor_capacity']
         )
 
-def all_cloud_density(grid, config, state, prev_state):
+def all_cloud_content(grid, config, state, prev_state):
     for tile in grid.tiles:
-        state[tile.id]['cloud_density'] = calculate_cloud_density(
+        state[tile.id]['cloud_content'] = calculate_cloud_content(
             config,
-            prev_state[tile.id]['cloud_density'],
+            prev_state[tile.id]['cloud_content'],
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
@@ -613,7 +617,7 @@ def distribution_wind(grid, config, state, prev_state):
 
         # calculate how much of each variable to distribute
         vapor_out = state[tile.id]['vapor_content'] * combined_wind / config['climate']['winds_max_vapor_transfer_speed'] * config['climate']['winds_max_vapor_transfer_ratio']
-        cloud_out = state[tile.id]['cloud_density'] * combined_wind / config['climate']['winds_max_cloud_transfer_speed'] * config['climate']['winds_max_cloud_transfer_ratio']
+        cloud_out = state[tile.id]['cloud_content'] * combined_wind / config['climate']['winds_max_cloud_transfer_speed'] * config['climate']['winds_max_cloud_transfer_ratio']
 
         # pressure_out_percent = combined_wind / config['climate']['winds_max_pressure_transfer_speed'] * config['climate']['winds_max_pressure_transfer_ratio']
         # temperature_out_percent = combined_wind / config['climate']['winds_max_temperature_transfer_speed'] * config['climate']['winds_max_temperature_transfer_ratio']
@@ -625,7 +629,7 @@ def distribution_wind(grid, config, state, prev_state):
             vapor_transfer = vapor_out * ratio
             state[neighbor.id]['vapor_content'] += vapor_transfer
             cloud_transfer = cloud_out * ratio
-            state[neighbor.id]['cloud_density'] += cloud_transfer
+            state[neighbor.id]['cloud_content'] += cloud_transfer
 
             # # Temperature
             # # We transfer a percentage of the temperature *difference*
@@ -642,7 +646,7 @@ def distribution_wind(grid, config, state, prev_state):
             # self_adjust_pressure += pressure_transfer
 
         state[tile.id]['vapor_content'] -= vapor_out
-        state[tile.id]['cloud_density'] -= cloud_out
+        state[tile.id]['cloud_content'] -= cloud_out
         # state[tile.id]['temperature'] -= self_adjust_temperature
         # state[tile.id]['air_pressure'] -= self_adjust_pressure
 
@@ -654,7 +658,7 @@ def distribution_water_flow(grid, config, state, prev_state):
             config,
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity'],
-            state[tile.id]['cloud_density']
+            state[tile.id]['cloud_content']
         )
 
         # adjust vapor content and set water flow based on how much it rained
@@ -665,14 +669,6 @@ def distribution_water_flow(grid, config, state, prev_state):
             state[tile.id]['water_flow'] = state[tile.id]['precipitation']
         else:
             state[tile.id]['water_flow'] = 0
-
-        # cloud density is adjusted based on the change in vapor content
-        state[tile.id]['cloud_density'] = calculate_cloud_density(
-            config,
-            state[tile.id]['cloud_density'],
-            state[tile.id]['vapor_content'],
-            state[tile.id]['vapor_capacity']
-        )
 
     # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
     queue = sorted([tile for tile in grid.tiles if not is_sea_tile(tile, config)], key=lambda tile: tile.altitude, reverse=True)
@@ -736,14 +732,14 @@ def iterate_climate(grid, config, prev_state):
     all_air_pressure(grid, config, state, prev_state)
     all_vapor_capacity(grid, config, state, prev_state)
     all_vapor_content(grid, config, state, prev_state) # this one also depends on prev_state, but only on itself
-    all_cloud_density(grid, config, state, prev_state)
+    all_cloud_content(grid, config, state, prev_state)
         
     # calculate wind
     all_wind(grid, config, state, prev_state)
     # distribute stuff via wind
     distribution_wind(grid, config, state, prev_state)
     
-    # # calculate precipitation, adjust cloud density, distribute water flow throughout the world
+    # calculate precipitation, adjust cloud density, distribute water flow throughout the world
     distribution_water_flow(grid, config, state, prev_state)
 
     return state
@@ -761,7 +757,7 @@ def starting_state(grid, config):
     # plant_humidity_absorption - Yes         - As 0
     # vapor_content             - No          - Yes
     # air_pressure              - No          - Yes
-    # cloud_density             - No          - Yes
+    # cloud_content             - No          - Yes
     # biomass                   - Yes         - As 0
     # wind                      - No          - No
     # precipitation             - No          - No
@@ -796,7 +792,7 @@ def starting_state(grid, config):
             calculate_temperature_init(config, 0, 0) + 273.15 # TODO - think about this
         )
         
-        state[tile.id]['cloud_density'] = calculate_cloud_density_init(
+        state[tile.id]['cloud_content'] = calculate_cloud_content_init(
             config,
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
