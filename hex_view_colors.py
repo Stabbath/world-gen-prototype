@@ -4,6 +4,7 @@ RED    = (255,0,0)
 YELLOW = (255,255,0)
 BLUE   = (0, 0, 255)
 OCEAN  = (32, 128, 255)
+PURPLE = (128, 0, 128)
 
 # Colors (default values)
 DEFAULT_HEX_COLOR = (173, 216, 230) # Light blue (ocean)
@@ -41,9 +42,10 @@ def color_temperature(viewTile, config):
     value = (min(max_temperature, max(min_temperature, temperature)) - min_temperature) / (max_temperature - min_temperature)
     
     color_stops = [
-        (0.0, BLUE),  # COLD
-        (0.5, WHITE), # cold but mid (intended to be 0º)
-        (1.0, RED)   # HOT
+        (0.0, WHITE), # FREEZING
+        (0.5, BLUE),  # cold but mid (intended to be 0º)
+        (0.75, PURPLE), # ideal (intended to be 25º)
+        (1.0, RED)    # HOT
     ]
     color = interpolate_color(value, color_stops)
     return color, color, BLACK
