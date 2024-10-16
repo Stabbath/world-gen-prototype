@@ -86,30 +86,57 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
 config = {}
 config['climate'] = {}
 config['climate']['max_iterations'] = 100
-config['climate']['temperature_lapse_rate'] = 0.0065    # C/m   : rate of decrease in temperature with height
-config['climate']['geothermal_constant'] = 0            # C     : a flat temperature bonus to every tile from the planet's own heat
-config['climate']['reference_temperature'] = 27         # C     : the baseline for temperature around the equator, not counting geothermal effects, basically
-config['climate']['reference_radiation'] = 1361         # W/m^2 : the radiation which will give the equator the reference_temperature
-config['climate']['cloud_reduction_factor'] = 0.8       # %     : how much a cloud density of 1.0 reduces incoming solar radiation by
-config['climate']['solar_constant'] = 1361              # W/m^2 : average solar energy received per unit area at the top of the atmosphere / at the equator
+config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
+config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
+config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
+config['climate']['reference_radiation'] = 1361         # W/m^2     : the radiation which will give the equator the reference_temperature
+config['climate']['cloud_reduction_factor'] = 0.8       #           : how much a cloud density of 1.0 reduces incoming solar radiation by
+config['climate']['solar_constant'] = 1361              # W/m^2     : average solar energy received per unit area at the top of the atmosphere / at the equator
 config['climate']['relative_humidity_precipitation_threshold'] = 0.85 # % : how much relative humidity we need for it to cause precipitation
-config['climate']['precipitation_rate_multiplier'] = 1  #       : factor to multiply precipitation rate by
-config['climate']['plant_cold_threshold'] = 0           # C     : temperature below which growth stops
-config['climate']['plant_optimal_low'] = 15             # C     : lower bound for optimal growth
-config['climate']['plant_optimal_high'] = 25            # C     : upper bound for optimal growth
-config['climate']['plant_hot_threshold'] = 45           # C     : temperature above which growth stops
-config['climate']['photosynthesis_radiation_ratio'] = 0.45 # %  : how much of the solar radiation is converted to energy for the plant
-config['climate']['solar_conversion_rate'] = 0.02       # %     : how much of the solar energy is converted into growth for the plant
-config['climate']['biomass_efficiency_exponent'] = 0.75 #       : exponent to define improved water efficiency from higher biomass in processing water intake
+config['climate']['precipitation_rate_multiplier'] = 1  #           : factor to multiply precipitation rate by
+config['climate']['plant_cold_threshold'] = 0           # C         : temperature below which growth stops
+config['climate']['plant_optimal_low'] = 15             # C         : lower bound for optimal growth
+config['climate']['plant_optimal_high'] = 25            # C         : upper bound for optimal growth
+config['climate']['plant_hot_threshold'] = 45           # C         : temperature above which growth stops
+config['climate']['photosynthesis_radiation_ratio'] = 0.45 #        : how much of the solar radiation is converted to energy for the plant
+config['climate']['solar_conversion_rate'] = 0.02       #           : how much of the solar energy is converted into growth for the plant
+config['climate']['biomass_efficiency_exponent'] = 1.33 #           : exponent to define improved water efficiency from higher biomass in processing water intake
 config['climate']['one_kilo_intake_reference'] = 0.00001157407 # kg/s : how much water a standard 1kg plant can take per second
-config['climate']['biomass_growth_constant'] = 0.0001   # kg    : how much flat biomass is added to each tile each iteration
+config['climate']['biomass_growth_constant'] = 0.0001   # kg        : how much flat biomass is added to each tile each iteration
 config['climate']['humidity_cloud_formation_threshold'] = 0.75 # % : relative humidity at which clouds start forming
-config['climate']['humidity_absorption_rate'] = 0.001   # kg/s  : how much water a plant can absorb from the air per second
-config['climate']['atmospheric_pressure'] = 101325      # Pa    : standard atmospheric pressure at sea level
-config['climate']['g'] = 9.80665                        # m/s^2 : acceleration due to gravity
-config['climate']['planet_molar_mass'] = 0.0289644      # kg/mol: molar mass of Earth's air
-config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K): ideal gas constant
-config['climate']['plant_transpiration'] = 0.01         # kg    : base value for water lost to transpiration per kg of biomass per iteration
+config['climate']['humidity_absorption_rate'] = 0.001   # kg/s      : how much water a plant can absorb from the air per second
+config['climate']['atmospheric_pressure'] = 101325      # Pa        : standard atmospheric pressure at sea level
+config['climate']['g'] = 9.80665                        # m/s^2     : acceleration due to gravity
+config['climate']['planet_molar_mass'] = 0.0289644      # kg/mol    : molar mass of Earth's air
+config['climate']['water_molar_mass'] = 0.01801528      # kg/mol    : molar mass of water
+config['climate']['universal_gas_constant'] = 8.31432   # J/(mol.K) : ideal gas constant
+config['climate']['plant_transpiration'] = 0.01         # kg        : base value for water lost to transpiration per kg of biomass per iteration
+config['climate']['evaporation_rate_factor'] = 1.0      #           : factor to multiply evaporation rate by
+config['climate']['water_temperature_multiplier'] = 0.8 # C         : factor to multiply temperature by to obtain water temperature
+config['climate']['water_temperature_constant'] = 3     # C         : constant to add to temperature to obtain water temperature
+config['climate']['water_temperature_multiplier_ocean'] = 0.4 # C   : factor to multiply temperature by to obtain water temperature; for the ocean
+config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant to add to temperature to obtain water temperature; for the ocean
+config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
+config['climate']['cloud_density_to_water_ratio'] = 0.1 #           : ratio to convert cloud density into rain
+config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
+
+
+# === CLIMATE VARIABLES === 
+units = {
+    "solar_radiation": "W/m^2", # Average power per unit of surface area
+    "water_flow": "kg/m^2/s", # Flow by weight per unit of surface area
+    "temperature": "C", # In Celsius
+    "vapor_capacity": "kg/m^2", # Maximum amount of water vapor in the air, per unit of surface area
+    "vapor_content": "kg/m^2", # Amount of water vapor in the air, per unit of surface area
+    "evaporation": "kg/m^2/s", # Water mass evaporated per second per unit of surface area
+    "evapotranspiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
+    "air_pressure": "Pa",
+    "wind": "m/s",
+    "cloud_density": "%", # 100% means every unit of surface area is covered by the thickest cloud possible
+    "precipitation": "kg/m^2", # Average rainfall volume per unit of surface area
+    "biomass": "kg/m^2", # Average biomass per unit of surface area
+    "plant_humidity_absorption": "kg/m^2/s" # Water taken in by plants directly from the atmosphere
+}
 
 
 # === BASIC CALCULATION FUNCTIONS ===
@@ -155,9 +182,10 @@ def calculate_cloud_density_init(config, vapor_content, vapor_capacity):
     return max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
 
 def calculate_cloud_density(config, prev_cloud_density, vapor_content, vapor_capacity, humidity_cloud_formation_threshold=0.75):
-    # TODO - review this, think about how we manage cloud density and humidity and how we iterate cloud density
     relative_humidity = (prev_cloud_density + vapor_content) / vapor_capacity
-    return max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
+    cloud_density = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
+    cloud_density = min(1, cloud_density + prev_cloud_density)
+    return cloud_density
 
 # Plant growth is maximum within a certain optimal range, and impossible beyond certain temperatures
 def _temperature_growth_factor(config, temperature): 
@@ -166,20 +194,15 @@ def _temperature_growth_factor(config, temperature):
     optimal_temp_low = config['climate']['plant_optimal_low']
     optimal_temp_high = config['climate']['plant_optimal_high']
     
-    if temperature < cold_threshold:
-        # too cold
+    if temperature < cold_threshold: # too cold
         return 0.0
-    elif temperature < optimal_temp_low:
-        # decreases linearly from 1 to 0 based on proximity to our thresholds here
+    elif temperature < optimal_temp_low: # decreases linearly from 1 to 0 based on proximity to our thresholds here
         return (temperature - cold_threshold)/(optimal_temp_low - cold_threshold)
-    elif temperature < optimal_temp_high:
-        # optimal range
+    elif temperature < optimal_temp_high: # optimal range
         return 1.0
-    elif temperature < hot_threshold:
-        # decreases linearly from 1 to 0 based on proximity to our thresholds here
+    elif temperature < hot_threshold: # decreases linearly from 1 to 0 based on proximity to our thresholds here
         return (hot_threshold - temperature)/(hot_threshold - optimal_temp_high)
-    else: 
-        # too hot
+    else: # too hot
         return 0.0
 
 # one_kilo_intake_reference = water a standard 1kg plant can take per second. Default value is basically 1 kg per day scaled down to seconds
@@ -208,11 +231,11 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     # the plant loses water through transpiration
     transpiration_loss = evapotranspiration 
     # resulting in a net intake (or outtake)
-    net_water_intake = ground_water + humidity_intake - transpiration_loss
+    available_water = ground_water + humidity_intake - transpiration_loss
     # however, there is a maximum amount it can actually use, depending on its biomass
-    # this scales less than linearly, due to improvements in water efficiency with greater biomass
+    # this scales supra-linearly, due to improvements in water efficiency with greater biomass
     useable_water = one_kilo_intake_reference * prev_biomass ** biomass_efficiency_exponent
-    water_factor = min(1.0, net_water_intake/useable_water)
+    water_factor = min(1.0, available_water/useable_water)
     
     # === ENERGY === #
     # plants are solar-powered, this is our source of energy for growth
@@ -262,18 +285,22 @@ def calculate_temperature_init(config, altitude, solar_radiation):
 def calculate_vapor_capacity_init(config, temperature):
     return calculate_vapor_capacity(temperature)
 
-def calculate_vapor_capacity(config, temperature):
-    # TODO - export these constants to the config
-    # NOTE: Current model is best suited for standard temperature and pressure, so within 50º of 0ºC and close to 0 atm.
-    # Clausius-Clapeyron equation
-    saturation_vapor_pressure = 6.1094 * math.exp((17.625*temperature)/(temperature + 243.04))
-    # Ideal gas law
-    saturation_vapor_capacity = 216.7 * saturation_vapor_pressure / (temperature + 273.15)
-    return saturation_vapor_capacity
+def aux_calculate_saturation_vapor_pressure(config, temperature):
+    # Auguste-Roche-Magnus equation (see Clausius-Clapeyron relation)
+    # NOTE: Current model is best suited for standard temperature and pressure, so 0ºC to 50ºC and close to 0 atm.
+    return 610.94 * math.exp((17.625*temperature)/(temperature + 243.04))
 
-def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransporation, plant_humidity_absorption):
-    # todo
-    pass
+def calculate_vapor_capacity(config, temperature):
+    water_molar_mass = config['climate']['water_molar_mass']
+    universal_gas_constant = config['climate']['universal_gas_constant']
+
+    saturation_vapor_pressure = aux_calculate_saturation_vapor_pressure(config, temperature)
+
+    # Ideal gas law
+    idea_gas_law_multiplier = water_molar_mass / universal_gas_constant
+    saturation_vapor_capacity = idea_gas_law_multiplier * saturation_vapor_pressure / (temperature + 273.15)
+
+    return saturation_vapor_capacity
 
 def calculate_vapor_content_init(config, is_sea, vapor_capacity):
     return vapor_capacity if is_sea else 0.1 * vapor_capacity
@@ -290,7 +317,6 @@ def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEV
     # TODO - should probably reconsider how this is calculated, regarding temperature at sea level? Need to understand the formula better
     # TODO - these constants combine into the atmospheric pressure scale height constant, which is 0.00012 m^-1
     # - So maybe we could pass in a base version of this constant, and adjust it based on the variables other than temperature and universal gas constant 
-    
 
     temperature_change_coefficient = (1 - temperature_lapse_rate * altitude / TEMPERATURE_AT_SEA_LEVEL)
     exp_constant = g * planet_molar_mass / universal_gas_constant / temperature_lapse_rate
@@ -300,25 +326,49 @@ def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEV
     return pressure
     
 # plants lose water to the air
-def calculate_evapotranspiration(config, biomass, temperature, vapor_content, vapor_capacity, transpiration_rate):
-    return 0 # TODO 
-    humidity_factor = min(1.0, vapor_content / vapor_capacity)
-    temperature_factor = 1.0 # temperature influences this as well
-    transpiration_loss = transpiration_rate * (1.0 - humidity_factor) * temperature_factor * biomass
+def calculate_evapotranspiration(config, biomass, temperature, vapor_content, vapor_capacity):
+    transpiration_rate = config['climate']['plant_transpiration']
+    transpiration_reference_temperature = config['climate']['transpiration_reference_temperature']
 
-# plants take water from the air
+    relative_humidity = min(1.0, vapor_content / vapor_capacity)
+    temperature_factor = max(0.0, temperature / transpiration_reference_temperature) # assuming linear for now
+    transpiration_loss_per_biomass = transpiration_rate * (1.0 - humidity_factor) * temperature_factor 
+    transpiration_loss_per_biomass = math.min(transpiration_loss_per_biomass, 1.0) # can't lose more water than you have
+    transpiration_loss = transpiration_loss_per_biomass * biomass
+    return transpiration_loss
+
+# some plants take water from the air
 def calculate_plant_humidity_absorption(config, biomass, vapor_content, vapor_capacity):
-    return 0 # TODO
     humidity_absorption_rate = config['climate']['humidity_absorption_rate']
-    # some plants also take in water from air humidity
+
+    relative_humidity = min(1.0, vapor_content / vapor_capacity)
     # assuming linear relation with relative humidity for now
-    humidity_intake = humidity_absorption_rate * (vapor_content / vapor_capacity) * biomass
+    humidity_intake = humidity_absorption_rate * relative_humidity * biomass
     return humidity_intake
 
-def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity, is_sea_tile):
-    return 0 # TODO
-    # sea tiles always have maximum evaporation
-    # otherwise, proportional to water flow, temperature, and inversely with ratio of vapor content/capacity
+def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity, is_sea_tile, air_pressure):
+    evaporation_rate_factor = config['climate']['evaporation_rate_factor']
+    if is_sea_tile:
+        water_temperature_multiplier = config['climate']['water_temperature_multiplier_ocean']
+        water_temperature_constant = config['climate']['water_temperature_constant_ocean']
+    else:
+        water_temperature_multiplier = config['climate']['water_temperature_multiplier']
+        water_temperature_constant = config['climate']['water_temperature']
+    ocean_water_flow_equivalent = config['climate']['ocean_water_flow_equivalent']
+
+    water_temperature = water_temperature_multiplier * temperature + water_temperature_constant
+    air_temperature = temperature
+    water_temperature_saturation_vapor_pressure = aux_calculate_saturation_vapor_pressure(config, water_temperature)
+    vapor_pressure = vapor_content / vapor_capacity * aux_calculate_saturation_vapor_pressure(config, air_temperature)
+    pressure_ratio = (water_temperature_saturation_vapor_pressure - vapor_pressure) / air_pressure
+
+    evaporation = evaporation_rate_factor * pressure_ratio
+    if not is_sea_tile:
+        evaporation = evaporation * water_flow / ocean_water_flow_equivalent
+    return evaporation
+
+def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransporation, plant_humidity_absorption):
+    return prev_vapor_content + evaporation + evapotransporation - plant_humidity_absorption
 
 
 # === ITERATIVE FUNCTIONS ===
@@ -394,7 +444,9 @@ def all_evaporation(grid, config, state, prev_state):
             prev_state[tile.id]['water_flow'],
             prev_state[tile.id]['temperature'],
             prev_state[tile.id]['vapor_content'],
-            prev_state[tile.id]['vapor_capacity']
+            prev_state[tile.id]['vapor_capacity'],
+            is_sea_tile(tile, config),
+            prev_state[tile.id]['air_pressure']
         )
 
 def all_plant_humidity_absorption(grid, config, state, prev_state):
