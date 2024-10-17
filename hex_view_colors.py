@@ -54,6 +54,9 @@ def color_humidity(viewTile, config):
     if 'vapor_content' not in viewTile.tile.grid.climate_data[viewTile.tile.id] or 'vapor_capacity' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
         return BLACK, RED, RED
     humidity = viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_content'] / viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity']
+    if humidity < 0:
+        return BLACK, RED, RED
+    
     value = min(1.0, humidity)
 
     color_stops = [

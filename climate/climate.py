@@ -1,9 +1,8 @@
 import math
 
-
 # === GENERAL TODO NOTES ===
 # TODO - maybe have to redefine cloud density as cloud vapor content, and model it as vapor going from the air to the clouds
-# TODO - think about Albedo
+# TODO - think about Albedo, greenhouse effect, etc for more advanced radiation/temperature modelling
 # TODO - temperature should be tracked as average, minimum, and maximum, probably.
 # TODO - if the map takes too long to stabilize, we can consider adding neighbor smoothing during the generation of the climate (probably not during gameplay)
 # TODO - add soil quality/minerals as a factor in plant growth (and beyond)
@@ -12,9 +11,17 @@ import math
 # TODO - ocean tiles should have a different config var for the temperature smoothing self weight, to make them smooth "faster" and keep them more stable
 # TODO: TEMPERATURE_AT_SEA_LEVEL should maybe be calculated as the average temperature of all sea tiles each iteration
 # TODO - possibly consider two types of wind and air pressure: one for the surface, and one for the upper atmosphere
+# TODO - temperature lapse rate can depend on water saturation, look up adiabatic lapse rate.
+# TODO - temperature smoothing should actually move temperature from warmer tiles to colder tiles, instead of averaging them all out. Or is that equivalent?
+# TODO - should add air pressure smoothing working in the same way
+# TODO - winds should be agnostic to distance between tiles; but air pressure gradients depend on that distance. That means the difference in air pressure should itself also be scaled with the distance, perhaps during smoothing
+#       For both air pressure and temperature smoothing, we could consider the temperature of the whole tile to be represented by its average centered on its center point
+#       Then, the farther away each tile center is from its neighbors, the weaker the effect of smoothing
+#       That leads leads to greater distances -> greater differences
+#       So air pressure difference scales with distance
+#       And then in air pressure gradients, the distance cancels out with that
 
 # TODO - IMPORTANT - NEXT STEPS
-# - fix air pressure, it's currently dropping below the generous hexview minimums, on the whole map
 # - fix clouds too - they are beyond overcharged
 # - fix humidity - whole world is at 100%
 # - fix biomass
@@ -32,9 +39,13 @@ import math
 # - no water humidity absorption
 # ... what else ?
 
+
 # === UTILS ===
+def vector_magnitude(x, y):
+    return math.sqrt(x * x + y * y)
+
 def normalize_vector(x, y):
-    magnitude = math.sqrt(x * x + y * y)
+    magnitude = vector_magnitude(x, y)
     return (x/magnitude, y/magnitude)
 
 def altitude_from_sea_level(config, altitude):
@@ -121,8 +132,22 @@ def default_climate_config():
     config = {}
     config['climate'] = {}
     config['climate']['max_iterations'] = 100
-    config['climate']['smoothen_temperature_map'] = True
-    config['climate']['temperature_smoothing_self_weight'] = 3
+    # average and diffusion are basically the same anyway, diffusion is just more math for similar results
+    config['climate']['smoothing_methods'] = ['average', 'diffusion', 'none']
+    # These other functions are stupid if we only look at direct neighbors, as distance is constant. They just degenerate into a single multiplicative constant
+    # But keeping them around in case we decide to do planetwide smoothing
+    config['climate']['smoothing_weight_methods'] = ['constant'] #, 'gaussian_kernel', 'inverse_distance']
+    config['climate']['temperature_smoothing_method'] = 'average'
+    config['climate']['temperature_smoothing_weight_method'] = 'constant'
+    config['climate']['sea_level_air_pressure_smoothing_method'] = 'average'
+    config['climate']['sea_level_air_pressure_smoothing_weight_method'] = 'constant'
+    # constants used in the weight calculation for smoothing
+    # it's the sigma in the gaussian kernel (the distance at which the weight becomes ~60.6%), the power in the inverse distance, and the constant in the constant weight
+    # if using average + constant, it's the weight for the tile itself. Recommended value range is 1~3
+    # if using diffusion + constant, it's the weight for the difference from its neighbors. Recommended 0.05~0.2
+    # if using gaussian kernel, I guess set it to something on the same order of magnitude of the distance between tiles?
+    config['climate']['temperature_smoothing_weight_constant'] = 3
+    config['climate']['sea_level_air_pressure_smoothing_weight_consant'] = 3
     config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
     config['climate']['geothermal_constant'] = 0            # C         : a flat temperature bonus to every tile from the planet's own heat
     config['climate']['reference_temperature'] = 27         # C         : the baseline for temperature around the equator, not counting geothermal effects, basically
@@ -171,6 +196,7 @@ def default_climate_config():
     config['climate']['distance_between_tiles'] = 10000      # m         : distance between centers of tiles, important for pressure gradients for wind
     return config
 
+
 # === CLIMATE VARIABLES === 
 # Everything is a yearly/undefined epoch average
 units = {
@@ -191,22 +217,67 @@ units = {
 
 
 # === SMOOTHING ===
-def smoothen_temperature(grid, config, state, prev_state):
-    weight = config['climate']['temperature_smoothing_self_weight']
-
-    # calculate smoothed temperature map
-    temperature_map = {}
-    for tile in grid.tiles:
-        temperature_sum = weight * state[tile.id]['temperature']
-        temperature_count = weight
-        for neighbor in tile.get_neighbors():
-            temperature_sum += state[neighbor.id]['temperature']
-            temperature_count += 1
-        temperature_map[tile.id] = temperature_sum / temperature_count
+def aux_smoothen(grid, config, state, property_name, smoothing_method, weight_method, weight_constant):
+    if smoothing_method == 'none':
+        return
     
-    # mutate state
+    if weight_method == 'constant':
+        weight = weight_constant
+    elif weight_method == 'gaussian_kernel':
+        distance = config['climate']['distance_between_tiles']
+        weight = math.exp(-distance * distance / (2 * weight_constant * weight_constant))
+    elif weight_method == 'inverse_distance':
+        distance = config['climate']['distance_between_tiles']
+        weight = 1 / (distance ** weight_constant)
+    else:
+        raise ValueError("Unknown weight method: " + weight_method)
+
+    if smoothing_method == 'average':
+        aux_weighted_average_smoothing(grid, state, weight, property_name)
+    elif smoothing_method == 'diffusion':
+        aux_diffusion_smoothing(grid, state, weight, property_name)
+    else:
+        raise ValueError("Unknown smoothing method: " + smoothing_method)
+
+# the weight here is the multiplier for the property value of the tile itself
+def aux_weighted_average_smoothing(grid, map, weight, property_name):
+    new_map = {}
     for tile in grid.tiles:
-        state[tile.id]['temperature'] = temperature_map[tile.id]
+        new_value = weight * map[tile.id][property_name]
+        count = weight
+        for neighbor in tile.get_neighbors():
+            new_value += map[neighbor.id][property_name]
+            count += 1
+        new_map[tile.id] = new_value / count
+
+    for tile in grid.tiles:
+        map[tile.id][property_name] = new_map[tile.id]
+
+# the weight here is the multiplier for the difference between the property value of the tile and its neighbors
+def aux_diffusion_smoothing(grid, map, weight, property_name):
+    new_map = {}
+    for tile in grid.tiles:
+        new_value = map[tile.id][property_name]
+        for neighbor in tile.get_neighbors():
+            new_value += weight * (map[neighbor.id][property_name] - map[tile.id][property_name])
+        new_map[tile.id] = new_value
+
+    for tile in grid.tiles:
+        map[tile.id][property_name] = new_map[tile.id]
+
+def smoothen_temperature(grid, config, state, prev_state):
+    smoothing_method = config['climate']['temperature_smoothing_method']
+    weight_method = config['climate']['temperature_smoothing_weight_method']
+    weight_constant = config['climate']['temperature_smoothing_weight_constant']
+
+    aux_smoothen(grid, config, state, 'temperature', smoothing_method, weight_method, weight_constant)
+
+def smoothen_sea_level_air_pressure(grid, config, state, prev_state):
+    smoothing_method = config['climate']['sea_level_air_pressure_smoothing_method']
+    weight_method = config['climate']['sea_level_air_pressure_smoothing_weight_method']
+    weight_constant = config['climate']['sea_level_air_pressure_smoothing_weight_consant']
+
+    aux_smoothen(grid, config, state, 'sea_level_air_pressure', smoothing_method, weight_method, weight_constant)
 
 
 # === BASIC CALCULATION FUNCTIONS ===
@@ -425,7 +496,6 @@ def calculate_sea_level_air_pressure(config, temperature, altitude, surface_pres
 
     # Hypsometric equation
     pressure = surface_pressure * math.exp(g / R * altitude / average_temperature_in_between)
-    print('pressure', pressure)
     return pressure
     
 # plants lose water to the air
@@ -470,8 +540,8 @@ def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_
         evaporation = evaporation * water_flow / ocean_water_flow_equivalent
     return evaporation
 
-def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotransporation, plant_humidity_absorption):
-    return prev_vapor_content + evaporation + evapotransporation - plant_humidity_absorption
+def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotranspiration, plant_humidity_absorption):
+    return prev_vapor_content + evaporation + evapotranspiration - plant_humidity_absorption
 
 
 # === ITERATIVE FUNCTIONS ===
@@ -624,19 +694,22 @@ def all_wind(grid, config, state, prev_state):
         geostrophic_wind = (pressure_gradient[0] * k, pressure_gradient[1] * k) 
         
         state[tile.id]['wind'] = geostrophic_wind
+        print('wind', geostrophic_wind)
 
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
         result = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
-        neighbor1, ratio1, neighbor2, ratio2 = result + (None, 0) if len(result) == 2 else result
-        state[tile.id]['wind1'] = ratio1
-        state[tile.id]['wind1_neighbor'] = neighbor1
-        if (neighbor2): # it's possible to point straight to the center and therefore have only one downwind neighbor here
-            state[tile.id]['wind2'] = ratio2
-            state[tile.id]['wind2_neighbor'] = neighbor2
-        
+        neighbor1, ratio1, neighbor2, ratio2 = (result + (None, 0)) if len(result) == 2 else result
+
         # sometimes even our only neighbor migh be None: if we get a wind straight up into the pole, for example
         if not neighbor1:
             continue
+        
+        magnitude = vector_magnitude(geostrophic_wind[0], geostrophic_wind[1])
+
+        # break it up into sub-winds
+        wind1 = ratio1 * magnitude
+        if neighbor2: # it's possible to point straight to the center and therefore have only one downwind neighbor here
+            wind2 = ratio2 * magnitude
         
         # winds are slowed down by friction
         friction = 0.0
@@ -644,14 +717,25 @@ def all_wind(grid, config, state, prev_state):
         # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
         friction += (altitude_from_sea_level(config, neighbor1.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
         # but forests also have an effect, so let's look at biomass on this tile
-        friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
+        friction += (state[tile.id]['biomass'] + state[neighbor1.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
         # and we apply the friction
-        state[tile.id]['wind1'] *= (1.0 - friction)
-        if 'wind2' in state[tile.id]:
+        friction = min(1.0, friction)
+        wind1 *= (1.0 - friction)
+        if neighbor2:
             friction = 0.0
             friction += (altitude_from_sea_level(config, neighbor2.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude
-            friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass']) * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
-            state[tile.id]['wind2'] *= (1.0 - friction)
+            friction += (state[tile.id]['biomass'] + state[neighbor2.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.01 friction
+            friction = min(1.0, friction)
+            wind2 *= (1.0 - friction)
+
+        # store sub-winds
+        if wind1 > 0:
+            state[tile.id]['wind1'] = wind1
+            state[tile.id]['wind1_neighbor'] = neighbor1
+        if neighbor2 and wind2 > 0:
+            state[tile.id]['wind2'] = wind2
+            state[tile.id]['wind2_neighbor'] = neighbor2
+
 
 def distribution_wind(grid, config, state, prev_state):
     # queue = every tile on the map, sorted by air pressure (lowest first)
@@ -660,19 +744,17 @@ def distribution_wind(grid, config, state, prev_state):
     while queue:
         tile = queue.pop(0)
 
-        if not state[tile.id]['wind1_neighbor']: # if there's no wind, skip
+        if 'wind1_neighbor' not in state[tile.id] or not state[tile.id]['wind1_neighbor']: # if there's no wind, skip
             continue
     
         # get calculated winds 
         neighbors = [(state[tile.id]['wind1_neighbor'], state[tile.id]['wind1'])]
-                
+        combined_wind = neighbors[0][1]
+        
         if 'wind2_neighbor' in state[tile.id]:
             neighbors.append((state[tile.id]['wind2_neighbor'], state[tile.id]['wind2']))
-
-        # get wind magnitude
-        combined_wind = state[tile.id]['wind']
-        combined_wind = math.sqrt(combined_wind[0] ** 2 + combined_wind[1] ** 2)
-
+            combined_wind += neighbors[1][1]
+        
         # calculate how much of each variable to distribute
         vapor_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_vapor_transfer_speed'])
         vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
@@ -684,17 +766,20 @@ def distribution_wind(grid, config, state, prev_state):
         # self_adjust_pressure = 0
         # self_adjust_temperature = 0
 
+
         # distribute temperature, air pressure, vapor content and clouds
         debug_vapor_sum = 0
         debug_cloud_sum = 0
+        debug_ratio_sum = 0
         for neighbor, ratio in neighbors:
-            vapor_transfer = vapor_out * ratio
+            vapor_transfer = vapor_out * ratio / combined_wind
             state[neighbor.id]['vapor_content'] += vapor_transfer
-            cloud_transfer = cloud_out * ratio
+            cloud_transfer = cloud_out * ratio / combined_wind
             state[neighbor.id]['cloud_content'] += cloud_transfer
             
             debug_vapor_sum += vapor_transfer
             debug_cloud_sum += cloud_transfer
+            debug_ratio_sum += ratio
 
             # # Temperature
             # # We transfer a percentage of the temperature *difference*
@@ -710,12 +795,12 @@ def distribution_wind(grid, config, state, prev_state):
             # state[neighbor.id]['sea_level_air_pressure'] += pressure_transfer
             # self_adjust_pressure += pressure_transfer
 
-        if abs(vapor_out - debug_vapor_sum) > 0.000000001:
-            print('VAPOR OUT AND DEBUG SUM MISMATCH')
-            print(vapor_out, debug_vapor_sum)
-        if abs(cloud_out - debug_cloud_sum) > 0.00000001:
-            print('CLOUD OUT AND DEBUG SUM MISMATCH')
-            print(cloud_out, debug_cloud_sum)
+        # if abs(vapor_out - debug_vapor_sum) > 0.00000001:
+        #     print('VAPOR OUT AND DEBUG SUM MISMATCH')
+        #     print(vapor_out, debug_vapor_sum, len(neighbors), debug_ratio_sum)
+        # if abs(cloud_out - debug_cloud_sum) > 0.00000001:
+        #     print('CLOUD OUT AND DEBUG SUM MISMATCH')
+        #     print(cloud_out, debug_cloud_sum, len(neighbors), debug_ratio_sum)
 
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out
@@ -802,18 +887,20 @@ def iterate_climate(grid, config, prev_state):
     
     # fresh variables - based on variables from this same state
     all_temperature(grid, config, state, prev_state)
-    if config['climate']['smoothen_temperature_map']:
+    if config['climate']['temperature_smoothing_method'] != 'none':
         smoothen_temperature(grid, config, state, prev_state)
     all_surface_air_pressure(grid, config, state, prev_state)
     all_sea_level_air_pressure(grid, config, state, prev_state)
+    if config['climate']['sea_level_air_pressure_smoothing_method'] != 'none':
+        smoothen_sea_level_air_pressure(grid, config, state, prev_state)
     all_vapor_capacity(grid, config, state, prev_state)
     all_vapor_content(grid, config, state, prev_state) # this one also depends on prev_state, but only on itself
     all_cloud_content(grid, config, state, prev_state)
     
-    # # calculate wind
-    # all_wind(grid, config, state, prev_state)
-    # # distribute stuff via wind
-    # distribution_wind(grid, config, state, prev_state)
+    # calculate wind
+    all_wind(grid, config, state, prev_state)
+    # distribute stuff via wind
+    distribution_wind(grid, config, state, prev_state)
     
     # calculate precipitation, adjust cloud density, distribute water flow throughout the world
     distribution_water_flow(grid, config, state, prev_state)
