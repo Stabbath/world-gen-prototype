@@ -739,6 +739,9 @@ def all_wind(grid, config, state, prev_state):
 
 
 def distribution_wind(grid, config, state, prev_state):
+    # first compute the wind map
+    all_wind(grid, config, state, prev_state)
+
     # queue = every tile on the map, sorted by air pressure (lowest first)
     queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'])
 
@@ -884,9 +887,7 @@ def iterate_climate(grid, config, prev_state):
     all_vapor_content(grid, config, state, prev_state) # this one also depends on prev_state, but only on itself
     all_cloud_content(grid, config, state, prev_state)
     
-    # calculate wind
-    all_wind(grid, config, state, prev_state)
-    # distribute stuff via wind
+    # calculate wind and distribute stuff via wind
     distribution_wind(grid, config, state, prev_state)
     
     # calculate precipitation, adjust cloud density, distribute water flow throughout the world
@@ -1083,6 +1084,64 @@ def simple_cloud_content_gain(config, vapor_content, vapor_capacity):
     else:
         return 0
 
+def distribution_wind_simple_v2(grid, config, state, prev_state):
+    # all_wind and distribution joined into one function
+    # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
+    # this is because vapor on the map was being spread along straight lines because of winds, and so creating a very unsmooth map for humidity
+    wind_friction_altitude = config['climate']['wind_friction_altitude']
+    wind_friction_biomass = config['climate']['wind_friction_biomass']
+    distance_between_tiles = config['climate']['distance_between_tiles']
+    pressure_gradient_to_wind_factor = 100
+
+    # queue = every tile on the map, sorted by air pressure (lowest first)
+    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'])
+    while queue:
+        tile = queue.pop(0)
+        sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
+        
+        neighbors_winds = []
+        for neighbor in tile.get_neighbors():
+            neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
+                        
+            pressure_gradient = (neighbor_pressure - sea_level_air_pressure) / distance_between_tiles
+        
+            wind = pressure_gradient * pressure_gradient_to_wind_factor
+
+            # winds are slowed down by friction
+            friction = 0.0
+            # - however, this is a minor effect at a large scale. But still something I want to include
+            # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
+            friction += (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
+            # but forests also have an effect, so let's look at biomass on this tile
+            friction += (state[tile.id]['biomass'] + state[neighbor.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
+            # and we apply the friction
+            friction = min(1.0, friction)
+
+            wind *= (1.0 - friction)
+
+            neighbors_winds.append((neighbor, wind))
+
+        combined_wind = 0
+        for neighbor, wind in neighbors_winds:
+            combined_wind += wind
+
+        # calculate how much of each variable to transfer out
+        vapor_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_vapor_transfer_speed'])
+        vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
+        cloud_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_cloud_transfer_speed'])
+        cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
+
+        for neighbor, wind in neighbors_winds:
+            # calculate how much to transfer to this one neighbor
+            vapor_transfer = vapor_out * wind / combined_wind
+            cloud_transfer = cloud_out * wind / combined_wind
+            state[neighbor.id]['vapor_content'] += vapor_transfer
+            state[neighbor.id]['cloud_content'] += cloud_transfer
+
+        state[tile.id]['vapor_content'] -= vapor_out
+        state[tile.id]['cloud_content'] -= cloud_out
+
+
 def all_wind_simple(grid, config, state, prev_state):
     wind_friction_altitude = config['climate']['wind_friction_altitude']
     wind_friction_biomass = config['climate']['wind_friction_biomass']
@@ -1148,6 +1207,9 @@ def all_wind_simple(grid, config, state, prev_state):
 
 
 def distribution_wind_simple(grid, config, state, prev_state):
+    # first compute the wind map
+    all_wind_simple(grid, config, state, prev_state)
+
     # queue = every tile on the map, sorted by air pressure (lowest first)
     queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'])
 
@@ -1203,9 +1265,14 @@ def iterate_climate_simplified(grid, config, prev_state):
         # bio-dead world for now
         state[tile.id]['biomass'] = 0
 
+    # smoothing
+    if config['climate']['temperature_smoothing_method'] != 'none':
+        smoothen_temperature(grid, config, state, prev_state)
+    if config['climate']['sea_level_air_pressure_smoothing_method'] != 'none':
+        smoothen_sea_level_air_pressure(grid, config, state, prev_state)
+
     # WINDS!
-    all_wind_simple(grid, config, state, prev_state)
-    distribution_wind_simple(grid, config, state, prev_state)
+    distribution_wind_simple_v2(grid, config, state, prev_state)
 
     for tile in grid.tiles:
         state[tile.id]['water_flow'] = state[tile.id]['cloud_content'] * 0.5
@@ -1219,7 +1286,8 @@ def iterate_climate_simplified(grid, config, prev_state):
 # the actual function supposed to be called from outside this module
 def generate_climate_simplified(grid, config):
     CLIMATE_MAX_ITER = config['climate']['max_iterations']
-        
+    CLIMATE_MAX_ITER = 20
+
     state = init_state(grid)
     for tile in grid.tiles: # init the variables that we will need on the first iteration
         state[tile.id]['water_flow'] = 0
