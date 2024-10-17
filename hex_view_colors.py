@@ -52,11 +52,14 @@ def color_clouds(viewTile, config):
 
 def color_humidity(viewTile, config):
     if 'vapor_content' not in viewTile.tile.grid.climate_data[viewTile.tile.id] or 'vapor_capacity' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        print('humidity data not found')
         return BLACK, RED, RED
     if viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity'] == 0:
+        print('vapor capacity is 0')
         return BLACK, RED, RED        
     humidity = viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_content'] / viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity']
     if humidity < 0:
+        print('humidity is negative')
         return BLACK, RED, RED
     
     value = min(1.0, humidity)
