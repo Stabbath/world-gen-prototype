@@ -13,6 +13,8 @@ from config_filer import update_config_from_file, config_to_file
 from view_tabs import TabPanel
 from climate.climate import generate_climate
 
+from hex_view_labels import wind_overlay_element, water_flow_overlay_element
+
 # ------------------------------
 # Constants and Configurations
 # ------------------------------
@@ -47,6 +49,25 @@ VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro",
                "Temperature", "Pressure", "Humidity",
                "Clouds", "Biomass"]
 
+OVERLAY_LABELS = ["None", "Wind", "Water Flow"]
+
+# Define overlay functions and their parameters
+OVERLAY_FUNCTIONS = {
+    "Wind": wind_overlay_element,
+    "Water Flow": water_flow_overlay_element
+}
+
+OVERLAY_REF = {
+    "Wind": 100.0,
+    "Water Flow": 10.0
+}
+
+OVERLAY_DRAW_SIZE = {
+    "Wind": 20,
+    "Water Flow": 30
+}
+
+
 def full_gen(config):
     print('Generating everything...')
     # NOTE - this is kind of a bandaid to simplify logic.
@@ -68,20 +89,26 @@ def regen_climate(config, hex_grid):
     print('Done')
     hex_views = gen_views(config, hex_grid)
     return hex_views
-    
+
+hex_view_color_map = {
+    "Plates": color_plates,
+    "Faults": color_faults,
+    "Elevation": color_altitude,
+    "Hydro": color_hydro,
+    "Temperature": color_temperature,
+    "Biomass": color_biomass,
+    "Pressure": color_sea_pressure,
+    "Humidity": color_humidity,
+    "Clouds": color_clouds
+}
+
 def gen_views(config, hex_grid):
+    
     # HexViews for different tabs
-    hex_views = {
-        "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, config=config, offset_x=100, offset_y=100),
-        "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, config=config, offset_x=100, offset_y=100),
-        "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, config=config, offset_x=100, offset_y=100),
-        "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100),
-        "Temperature": HexView(hex_grid, size=HEX_SIZE, func_color=color_temperature, config=config, offset_x=100, offset_y=100),
-        "Biomass": HexView(hex_grid, size=HEX_SIZE, func_color=color_biomass, config=config, offset_x=100, offset_y=100),
-        "Pressure": HexView(hex_grid, size=HEX_SIZE, func_color=color_sea_pressure, config=config, offset_x=100, offset_y=100),
-        "Humidity": HexView(hex_grid, size=HEX_SIZE, func_color=color_humidity, config=config, offset_x=100, offset_y=100),
-        "Clouds": HexView(hex_grid, size=HEX_SIZE, func_color=color_clouds, config=config, offset_x=100, offset_y=100)
-    }
+    hex_views = {}
+    for key in hex_view_color_map.keys():
+        func = hex_view_color_map[key]
+        hex_views[key] = HexView(hex_grid, size=HEX_SIZE, func_color=func, config=config, offset_x=100, offset_y=100)
     return hex_views
 
 def gen_world(config):
@@ -127,6 +154,7 @@ def main():
         hex_grid, hex_views = full_gen(config)
         
         current_tab = VIEW_LABELS[0] # defaul view
+        current_overlay = OVERLAY_LABELS[0]
 
         font = pygame.font.SysFont('Arial', 18)
 
@@ -139,7 +167,8 @@ def main():
 
 #        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
         tab_panel = TabPanel(VIEW_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING)
-
+        overlay_panel = TabPanel(OVERLAY_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING, TAB_BUTTON_HEIGHT + TAB_BUTTON_PADDING)
+        
         # Main view rectangle adjusted to not overlap with tab buttons
         main_view_rect = pygame.Rect(PANEL_WIDTH, TABS_HEIGHT, SCREEN_WIDTH - PANEL_WIDTH, SCREEN_HEIGHT - TABS_HEIGHT)
 
@@ -161,9 +190,12 @@ def main():
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     # First, check if the click is on any tab button
                     tab_clicked = tab_panel.process_event(event)
+                    overlay_clicked = overlay_panel.process_event(event)
         
                     if tab_clicked is not None:
                         current_tab = tab_clicked
+                    elif overlay_clicked is not None:
+                        current_overlay = overlay_clicked
                     else:
                         # Check if mouse is over the main view pane
                         if main_view_rect.collidepoint(event.pos):
@@ -208,9 +240,9 @@ def main():
             # Draw the hex grid within the main view pane
             if current_tab and hex_views.get(current_tab):
                 # Create a surface for the main view
-                main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height))
+                main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height), pygame.SRCALPHA)
                 main_view_surface.fill(BACKGROUND_COLOR)  # Background color
-        
+    
                 # Adjust camera offset to consider the main view pane position
                 adjusted_camera = Camera(
                     zoom=camera.zoom,
@@ -218,14 +250,36 @@ def main():
                     min_zoom=MIN_ZOOM,
                     max_zoom=MAX_ZOOM
                 )
-        
+    
+                # Draw the hex grid itself
                 hex_views[current_tab].draw(main_view_surface, adjusted_camera)
-        
+    
+                # Draw overlays if an overlay is selected
+                if current_overlay != "None" and current_overlay in OVERLAY_FUNCTIONS:
+                    overlay_func = OVERLAY_FUNCTIONS[current_overlay]
+                    ref_value = OVERLAY_REF[current_overlay]
+                    draw_size = OVERLAY_DRAW_SIZE[current_overlay]
+    
+                    for tile in hex_views[current_tab].tiles:
+                        overlay_color = hex_view_color_map[current_tab](tile, config)[2]  # Get overlay color from the map
+                        # Get the overlay element for the tile
+                        overlay_element = overlay_func(tile.tile, hex_grid.climate_data, ref_value, draw_size, overlay_color, adjusted_camera)
+                        if overlay_element:
+                            x = tile.tile.col * HORIZONTAL_SPACING
+                            y = tile.tile.row * VERTICAL_SPACING - (VERTICAL_SPACING / 2 if tile.tile.col % 2 == 0 else 0)
+
+                            # Blit the overlay element onto the main view surface
+                            main_view_surface.blit(
+                                overlay_element,
+                                adjusted_camera.world_to_screen((x, y))
+                            )
+    
                 # Blit the main view surface onto the screen at the correct position
                 screen.blit(main_view_surface, (PANEL_WIDTH, TABS_HEIGHT))
-        
+            
             # Draw tabs on top of the main view
             tab_panel.draw(screen, font, current_tab)
+            overlay_panel.draw(screen, font, current_overlay)
         
             # Update the display
             pygame.display.flip()

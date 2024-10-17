@@ -135,8 +135,8 @@ def default_climate_config():
     # average and diffusion are basically the same anyway, diffusion is just more math for similar results
     config['climate']['smoothing_methods'] = ['average', 'diffusion', 'none']
     # These other functions are stupid if we only look at direct neighbors, as distance is constant. They just degenerate into a single multiplicative constant
-    # But keeping them around in case we decide to do planetwide smoothing
-    config['climate']['smoothing_weight_methods'] = ['constant'] #, 'gaussian_kernel', 'inverse_distance']
+    # But keeping them around in case we decide to do smoothing with more distant tiles
+    config['climate']['smoothing_weight_methods'] = ['constant', 'gaussian_kernel', 'inverse_distance']
     config['climate']['temperature_smoothing_method'] = 'average'
     config['climate']['temperature_smoothing_weight_method'] = 'constant'
     config['climate']['sea_level_air_pressure_smoothing_method'] = 'average'
@@ -145,7 +145,7 @@ def default_climate_config():
     # it's the sigma in the gaussian kernel (the distance at which the weight becomes ~60.6%), the power in the inverse distance, and the constant in the constant weight
     # if using average + constant, it's the weight for the tile itself. Recommended value range is 1~3
     # if using diffusion + constant, it's the weight for the difference from its neighbors. Recommended 0.05~0.2
-    # if using gaussian kernel, I guess set it to something on the same order of magnitude of the distance between tiles?
+    # if using gaussian kernel, I guess set it to something below half of distance between tiles
     config['climate']['temperature_smoothing_weight_constant'] = 3
     config['climate']['sea_level_air_pressure_smoothing_weight_consant'] = 3
     config['climate']['temperature_lapse_rate'] = 0.0065    # C/m       : rate of decrease in temperature with height
@@ -768,19 +768,12 @@ def distribution_wind(grid, config, state, prev_state):
 
 
         # distribute temperature, air pressure, vapor content and clouds
-        debug_vapor_sum = 0
-        debug_cloud_sum = 0
-        debug_ratio_sum = 0
         for neighbor, ratio in neighbors:
             vapor_transfer = vapor_out * ratio / combined_wind
             state[neighbor.id]['vapor_content'] += vapor_transfer
             cloud_transfer = cloud_out * ratio / combined_wind
             state[neighbor.id]['cloud_content'] += cloud_transfer
             
-            debug_vapor_sum += vapor_transfer
-            debug_cloud_sum += cloud_transfer
-            debug_ratio_sum += ratio
-
             # # Temperature
             # # We transfer a percentage of the temperature *difference*
             # temperature_difference = state[tile.id]['temperature'] - state[neighbor.id]['temperature']
@@ -794,13 +787,6 @@ def distribution_wind(grid, config, state, prev_state):
             # pressure_transfer = pressure_difference * pressure_out_percent * ratio
             # state[neighbor.id]['sea_level_air_pressure'] += pressure_transfer
             # self_adjust_pressure += pressure_transfer
-
-        # if abs(vapor_out - debug_vapor_sum) > 0.00000001:
-        #     print('VAPOR OUT AND DEBUG SUM MISMATCH')
-        #     print(vapor_out, debug_vapor_sum, len(neighbors), debug_ratio_sum)
-        # if abs(cloud_out - debug_cloud_sum) > 0.00000001:
-        #     print('CLOUD OUT AND DEBUG SUM MISMATCH')
-        #     print(cloud_out, debug_cloud_sum, len(neighbors), debug_ratio_sum)
 
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out

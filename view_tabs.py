@@ -1,17 +1,17 @@
 import pygame
 
 class TabPanel:
-    def __init__(self, labels, panel_width, tab_button_width, tab_button_height, tab_padding, selected_color=(100,100,100), base_color=(50,50,50), background_color=(255, 255, 255)):
+    def __init__(self, labels, panel_width, tab_button_width, tab_button_height, tab_padding, vertical_offset=0, selected_color=(100,100,100), base_color=(50,50,50), background_color=(255, 255, 255)):
         self.background_color = background_color
         self.base_color = base_color
         self.selected_color = selected_color
         self.tab_buttons = []
 
         for idx, label in enumerate(labels):
-            # Position tabs with padding from the top and horizontally aligned
+            # Position tabs with padding from the top and horizontally aligned, apply vertical offset
             button_rect = pygame.Rect(
                 panel_width + idx * (tab_button_width + tab_padding), 
-                (tab_padding) // 2,
+                (tab_padding // 2) + vertical_offset,  # Apply vertical offset here
                 tab_button_width, 
                 tab_button_height
             )
@@ -23,7 +23,6 @@ class TabPanel:
             if button_rect.collidepoint(event.pos):
                 return label
         return None
-
 
     def draw(self, screen, font, selected_label):
         for label, button_rect in self.tab_buttons:
