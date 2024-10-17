@@ -4,7 +4,7 @@ import sys
 import traceback
 from camera import Camera
 from hex_view import HexView
-from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults, color_biomass, color_temperature, color_pressure, color_humidity, color_clouds
+from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults, color_biomass, color_temperature, color_sea_pressure, color_humidity, color_clouds
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
 from config import default_config, ui_fields as UI_FIELDS
@@ -78,7 +78,7 @@ def gen_views(config, hex_grid):
         "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100),
         "Temperature": HexView(hex_grid, size=HEX_SIZE, func_color=color_temperature, config=config, offset_x=100, offset_y=100),
         "Biomass": HexView(hex_grid, size=HEX_SIZE, func_color=color_biomass, config=config, offset_x=100, offset_y=100),
-        "Pressure": HexView(hex_grid, size=HEX_SIZE, func_color=color_pressure, config=config, offset_x=100, offset_y=100),
+        "Pressure": HexView(hex_grid, size=HEX_SIZE, func_color=color_sea_pressure, config=config, offset_x=100, offset_y=100),
         "Humidity": HexView(hex_grid, size=HEX_SIZE, func_color=color_humidity, config=config, offset_x=100, offset_y=100),
         "Clouds": HexView(hex_grid, size=HEX_SIZE, func_color=color_clouds, config=config, offset_x=100, offset_y=100)
     }

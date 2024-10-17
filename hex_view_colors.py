@@ -36,6 +36,8 @@ def interpolate_color(value, stops):
     return stops[-1][1]  # Fallback to the last color if something goes wrong
 
 def color_clouds(viewTile, config):
+    if 'cloud_content' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        return BLACK, RED, RED
     cloud_content = viewTile.tile.grid.climate_data[viewTile.tile.id]['cloud_content']
     max_cloud_content = config['climate']['cloud_content_for_max_density']
     value = cloud_content / max_cloud_content * 0.5 # halved, so we can see overloaded clouds through the color stops, for debugging
@@ -49,6 +51,8 @@ def color_clouds(viewTile, config):
     return color, color, BLACK
 
 def color_humidity(viewTile, config):
+    if 'vapor_content' not in viewTile.tile.grid.climate_data[viewTile.tile.id] or 'vapor_capacity' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        return BLACK, RED, RED
     humidity = viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_content'] / viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity']
     value = min(1.0, humidity)
 
@@ -60,22 +64,26 @@ def color_humidity(viewTile, config):
     color = interpolate_color(value, color_stops)
     return color, color, BLACK
 
-def color_pressure(viewTile, config):
-    min_pressure = 81325 # approximate, assuming sea level is normally around 101325 Pa
-    max_pressure = 121325 # approximate, assuming sea level is normally around 101325 Pa
-
-    pressure = viewTile.tile.grid.climate_data[viewTile.tile.id]['air_pressure']
-    value = min(0.0, max(1.0, (pressure - min_pressure)/(max_pressure - min_pressure)))
+def color_sea_pressure(viewTile, config):
+    if 'sea_level_air_pressure' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        return BLACK, RED, RED
+    min_pressure = 91325 # 
+    ref_pressure = 101325 # sea level
+    max_pressure = 111325 # approximate, assuming sea level is normally around 101325 Pa
+    pressure = viewTile.tile.grid.climate_data[viewTile.tile.id]['sea_level_air_pressure']
+    value = min(1.0, max(0.0, (pressure - min_pressure)/(max_pressure - min_pressure)))
 
     color_stops = [
         (0.0, BLUE), # LOW PRESSURE
-        (0.5, WHITE), # MID
+        (ref_pressure / max_pressure, WHITE), # sea level
         (1.0, RED)  # HIGH PRESSURE
     ]
     color = interpolate_color(value, color_stops)
     return color, color, BLACK
 
 def color_temperature(viewTile, config):
+    if 'temperature' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        return BLACK, RED, RED
     max_temperature = 50
     min_temperature = -50
 
@@ -92,6 +100,8 @@ def color_temperature(viewTile, config):
     return color, color, BLACK
     
 def color_biomass(viewTile, config):
+    if 'biomass' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
+        return BLACK, RED, RED
     if viewTile.tile.altitude <= config['sea_level']:
         return OCEAN, OCEAN, BLACK
     

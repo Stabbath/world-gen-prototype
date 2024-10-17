@@ -9,6 +9,9 @@ import math
 # TODO - add soil quality/minerals as a factor in plant growth (and beyond)
 # TODO - add roughness of terrain as a factor in wind friction (and beyond)
 # TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
+# TODO - ocean tiles should have a different config var for the temperature smoothing self weight, to make them smooth "faster" and keep them more stable
+# TODO: TEMPERATURE_AT_SEA_LEVEL should maybe be calculated as the average temperature of all sea tiles each iteration
+# TODO - possibly consider two types of wind and air pressure: one for the surface, and one for the upper atmosphere
 
 # TODO - IMPORTANT - NEXT STEPS
 # - fix air pressure, it's currently dropping below the generous hexview minimums, on the whole map
@@ -30,6 +33,10 @@ import math
 # ... what else ?
 
 # === UTILS ===
+def normalize_vector(x, y):
+    magnitude = math.sqrt(x * x + y * y)
+    return (x/magnitude, y/magnitude)
+
 def altitude_from_sea_level(config, altitude):
     return max(0, altitude - config["sea_level"]) # we're not simulating the ocean currently, so we never need to know the depth of a tile, so min = 0
 
@@ -161,6 +168,7 @@ def default_climate_config():
     config['climate']['winds_max_cloud_transfer_ratio'] = 0.6 #         : ""
     config['climate']['winds_max_pressure_transfer_ratio'] = 0.05 #     : ""
     config['climate']['winds_max_temperature_transfer_ratio'] = 0.1 #   : ""
+    config['climate']['distance_between_tiles'] = 10000      # m         : distance between centers of tiles, important for pressure gradients for wind
     return config
 
 # === CLIMATE VARIABLES === 
@@ -173,7 +181,7 @@ units = {
     "vapor_content": "kg/m^2", # Amount of water vapor in the air, per unit of surface area
     "evaporation": "kg/m^2/s", # Water mass evaporated per second per unit of surface area
     "evapotranspiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
-    "air_pressure": "Pa",
+    "sea_level_air_pressure": "Pa",
     "wind": "m/s",
     "cloud_content": "kg/m^2", # Amount of water in the clouds, per unit of surface area (yearly average)
     "precipitation": "kg/m^2", # Average rainfall volume per unit of surface area
@@ -239,20 +247,24 @@ def calculate_solar_radiation(config, normalized_latitude, cloud_content):
     cloud_content_for_max_density = config['climate']['cloud_content_for_max_density']
     incoming_radiation = calculate_solar_radiation_init(config, normalized_latitude)
     cloud_density = min(1.0, cloud_content/cloud_content_for_max_density)
+    
     radiation = incoming_radiation * (1.0 - cloud_density * cloud_reduction_factor)
+    # if radiation > 1500:
+    #     print('CLOUD DENSITY', cloud_density)
+    #     print('INCOMING radiation', incoming_radiation)
     return radiation
 
 def calculate_cloud_content_init(config, vapor_content, vapor_capacity):
-    humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
-    relative_humidity = vapor_content / vapor_capacity
-    factor = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
-    return factor * vapor_content
+    return calculate_cloud_content(config, vapor_content, vapor_capacity)
 
-def calculate_cloud_content(config, prev_cloud_content, vapor_content, vapor_capacity):
+def calculate_cloud_content(config, vapor_content, vapor_capacity):
     humidity_cloud_formation_threshold = config['climate']['humidity_cloud_formation_threshold']
     relative_humidity = vapor_content / vapor_capacity
     factor = max(0, (relative_humidity - humidity_cloud_formation_threshold)/(1 - humidity_cloud_formation_threshold))
-    return factor * vapor_content + prev_cloud_content
+    cloud_content = factor * vapor_content
+    
+    # print('Cloud density', cloud_content / config['climate']['cloud_content_for_max_density'])
+    return cloud_content
 
 # Plant growth is maximum within a certain optimal range, and impossible beyond certain temperatures
 def _temperature_growth_factor(config, temperature): 
@@ -374,10 +386,11 @@ def calculate_vapor_capacity(config, temperature):
 def calculate_vapor_content_init(config, is_sea, vapor_capacity):
     return vapor_capacity if is_sea else 0.1 * vapor_capacity
 
-def calculate_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
-    return calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
+def calculate_surface_air_pressure_init(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
+    return calculate_surface_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL)
 
-def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
+def calculate_surface_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEVEL):
+    TEMPERATURE_AT_SEA_LEVEL = 288.15 # Reference used on Earth
     altitude = altitude_from_sea_level(config, altitude)
     g = config['climate']['g']
     planet_molar_mass = config['climate']['planet_molar_mass']
@@ -388,11 +401,31 @@ def calculate_air_pressure(config, temperature, altitude, TEMPERATURE_AT_SEA_LEV
     # TODO - these constants combine into the atmospheric pressure scale height constant, which is 0.00012 m^-1
     # - So maybe we could pass in a base version of this constant, and adjust it based on the variables other than temperature and universal gas constant 
 
+    # temperature_change_coefficient = (temperature + 273.15) / TEMPERATURE_AT_SEA_LEVEL
     temperature_change_coefficient = (1 - temperature_lapse_rate * altitude / TEMPERATURE_AT_SEA_LEVEL)
     exp_constant = g * planet_molar_mass / universal_gas_constant / temperature_lapse_rate
     
+    # print('temp change', temperature_change_coefficient)
+    
     # Barometric formula
     pressure = atmospheric_pressure * (temperature_change_coefficient ** exp_constant)
+    # Barometric formula assuming an isothermal atmosphere
+    # pressure = atmospheric_pressure * math.exp(- exp_constant * altitude)
+        
+    return pressure
+
+def calculate_sea_level_air_pressure(config, temperature, altitude, surface_pressure):
+    altitude = altitude_from_sea_level(config, altitude)
+    g = config['climate']['g']
+    R = config['climate']['specific_gas_constant_for_air']
+    temperature_lapse_rate = config['climate']['temperature_lapse_rate']
+    temperature_at_sea_level = temperature + temperature_lapse_rate * altitude
+    average_temperature_in_between = (temperature - temperature_at_sea_level) / 2
+    average_temperature_in_between += 273.15
+
+    # Hypsometric equation
+    pressure = surface_pressure * math.exp(g / R * altitude / average_temperature_in_between)
+    print('pressure', pressure)
     return pressure
     
 # plants lose water to the air
@@ -416,7 +449,7 @@ def calculate_plant_humidity_absorption(config, biomass, vapor_content, vapor_ca
     humidity_intake = humidity_absorption_rate * relative_humidity * biomass
     return humidity_intake
 
-def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity, is_sea_tile, air_pressure):
+def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_capacity, is_sea_tile, sea_level_air_pressure):
     evaporation_rate_factor = config['climate']['evaporation_rate_factor']
     if is_sea_tile:
         water_temperature_multiplier = config['climate']['water_temperature_multiplier_ocean']
@@ -430,7 +463,7 @@ def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_
     air_temperature = temperature
     water_temperature_saturation_vapor_pressure = aux_calculate_saturation_vapor_pressure(config, water_temperature)
     vapor_pressure = vapor_content / vapor_capacity * aux_calculate_saturation_vapor_pressure(config, air_temperature)
-    pressure_ratio = (water_temperature_saturation_vapor_pressure - vapor_pressure) / air_pressure
+    pressure_ratio = (water_temperature_saturation_vapor_pressure - vapor_pressure) / sea_level_air_pressure
 
     evaporation = evaporation_rate_factor * pressure_ratio
     if not is_sea_tile:
@@ -450,6 +483,8 @@ def all_solar_radiation(grid, config, state, prev_state):
             latitude, 
             prev_state[tile.id]['cloud_content']
         )
+        # if state[tile.id]['solar_radiation'] > 2000:
+        #     print('solar radiation updated', prev_state[tile.id]['solar_radiation'], 'to', state[tile.id]['solar_radiation'])
 
 def all_biomass(grid, config, state, prev_state):
     for tile in grid.tiles:
@@ -471,14 +506,25 @@ def all_temperature(grid, config, state, prev_state):
             tile.altitude,
             state[tile.id]['solar_radiation']
         )
+        # if state[tile.id]['temperature'] > 100000:
+        #     print('temperature updated from', prev_state[tile.id]['temperature'], 'to', state[tile.id]['temperature'])
 
-def all_air_pressure(grid, config, state, prev_state):
+def all_surface_air_pressure(grid, config, state, prev_state):
     for tile in grid.tiles:
-        state[tile.id]['air_pressure'] = calculate_air_pressure(
+        state[tile.id]['surface_air_pressure'] = calculate_surface_air_pressure(
             config,
             state[tile.id]['temperature'],
             tile.altitude,
-            calculate_temperature_init(config, 0, 0) + 273.15 # TODO - think about this
+            calculate_temperature_init(config, 0, state[tile.id]['solar_radiation']) + 273.15
+        )
+
+def all_sea_level_air_pressure(grid, config, state, prev_state):
+    for tile in grid.tiles:
+        state[tile.id]['sea_level_air_pressure'] = calculate_sea_level_air_pressure(
+            config,
+            state[tile.id]['temperature'],
+            tile.altitude,
+            state[tile.id]['surface_air_pressure']
         )
 
 def all_vapor_capacity(grid, config, state, prev_state):
@@ -517,7 +563,7 @@ def all_evaporation(grid, config, state, prev_state):
             prev_state[tile.id]['vapor_content'],
             prev_state[tile.id]['vapor_capacity'],
             is_sea_tile(tile, config),
-            prev_state[tile.id]['air_pressure']
+            prev_state[tile.id]['sea_level_air_pressure']
         )
 
 def all_plant_humidity_absorption(grid, config, state, prev_state):
@@ -533,11 +579,13 @@ def all_cloud_content(grid, config, state, prev_state):
     for tile in grid.tiles:
         state[tile.id]['cloud_content'] = calculate_cloud_content(
             config,
-            prev_state[tile.id]['cloud_content'],
             state[tile.id]['vapor_content'],
             state[tile.id]['vapor_capacity']
         )
-
+    # have to adjust vapor content after calculating cloud content
+    for tile in grid.tiles:
+        state[tile.id]['vapor_content'] -= state[tile.id]['cloud_content']
+        state[tile.id]['cloud_content'] += prev_state[tile.id]['cloud_content']
 
 # === DISTRIBUTION FUNCTIONS ===
 def all_wind(grid, config, state, prev_state):
@@ -545,24 +593,25 @@ def all_wind(grid, config, state, prev_state):
     planet_angular_velocity = config['climate']['planet_angular_velocity']
     wind_friction_altitude = config['climate']['wind_friction_altitude']
     wind_friction_biomass = config['climate']['wind_friction_biomass']
+    distance_between_tiles = config['climate']['distance_between_tiles']
 
     for tile in grid.tiles:
-        air_pressure = state[tile.id]['air_pressure']
+        sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
         
         pressure_gradient = [0, 0]
         vectors = []
         for neighbor in tile.get_neighbors():
-            neighbor_pressure = state[neighbor.id]['air_pressure']
+            neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
                         
-            vector_direction = (neighbor.col - tile.col, neighbor.row - tile.row)
-            vector_intensity = neighbor_pressure - air_pressure
+            vector_direction = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
+            vector_intensity = (neighbor_pressure - sea_level_air_pressure) / distance_between_tiles
             vectors.append((vector_direction[0] * vector_intensity, vector_direction[1] * vector_intensity))
         for vector in vectors:
             pressure_gradient[0] += vector[0]
             pressure_gradient[1] += vector[1]
         
         # TODO - temp fix, because we're getting values too close to 0 when calculating manually
-        air_density = 1.225 # air_pressure / (specific_gas_constant_for_air * state[tile.id]['temperature'])
+        air_density = 1.225 #    sea_level_air_pressure / (specific_gas_constant_for_air * state[tile.id]['temperature'])
 
         # finally, we calculate the geostrophic wind, to account for the coriolis effect
         # geostrophic wind is an approximation of the wind speed, which considers the coriolis effect and pressure gradient force to be in equilibrium
@@ -606,7 +655,7 @@ def all_wind(grid, config, state, prev_state):
 
 def distribution_wind(grid, config, state, prev_state):
     # queue = every tile on the map, sorted by air pressure (lowest first)
-    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['air_pressure'])
+    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'])
 
     while queue:
         tile = queue.pop(0)
@@ -625,8 +674,10 @@ def distribution_wind(grid, config, state, prev_state):
         combined_wind = math.sqrt(combined_wind[0] ** 2 + combined_wind[1] ** 2)
 
         # calculate how much of each variable to distribute
-        vapor_out = state[tile.id]['vapor_content'] * combined_wind / config['climate']['winds_max_vapor_transfer_speed'] * config['climate']['winds_max_vapor_transfer_ratio']
-        cloud_out = state[tile.id]['cloud_content'] * combined_wind / config['climate']['winds_max_cloud_transfer_speed'] * config['climate']['winds_max_cloud_transfer_ratio']
+        vapor_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_vapor_transfer_speed'])
+        vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
+        cloud_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_cloud_transfer_speed'])
+        cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
 
         # pressure_out_percent = combined_wind / config['climate']['winds_max_pressure_transfer_speed'] * config['climate']['winds_max_pressure_transfer_ratio']
         # temperature_out_percent = combined_wind / config['climate']['winds_max_temperature_transfer_speed'] * config['climate']['winds_max_temperature_transfer_ratio']
@@ -634,11 +685,16 @@ def distribution_wind(grid, config, state, prev_state):
         # self_adjust_temperature = 0
 
         # distribute temperature, air pressure, vapor content and clouds
+        debug_vapor_sum = 0
+        debug_cloud_sum = 0
         for neighbor, ratio in neighbors:
             vapor_transfer = vapor_out * ratio
             state[neighbor.id]['vapor_content'] += vapor_transfer
             cloud_transfer = cloud_out * ratio
             state[neighbor.id]['cloud_content'] += cloud_transfer
+            
+            debug_vapor_sum += vapor_transfer
+            debug_cloud_sum += cloud_transfer
 
             # # Temperature
             # # We transfer a percentage of the temperature *difference*
@@ -649,15 +705,22 @@ def distribution_wind(grid, config, state, prev_state):
 
             # # Air pressure
             # # We transfer a percentage of the pressure *difference*
-            # pressure_difference = state[tile.id]['air_pressure'] - state[neighbor.id]['air_pressure']
+            # pressure_difference = state[tile.id]['sea_level_air_pressure'] - state[neighbor.id]['sea_level_air_pressure']
             # pressure_transfer = pressure_difference * pressure_out_percent * ratio
-            # state[neighbor.id]['air_pressure'] += pressure_transfer
+            # state[neighbor.id]['sea_level_air_pressure'] += pressure_transfer
             # self_adjust_pressure += pressure_transfer
+
+        if abs(vapor_out - debug_vapor_sum) > 0.000000001:
+            print('VAPOR OUT AND DEBUG SUM MISMATCH')
+            print(vapor_out, debug_vapor_sum)
+        if abs(cloud_out - debug_cloud_sum) > 0.00000001:
+            print('CLOUD OUT AND DEBUG SUM MISMATCH')
+            print(cloud_out, debug_cloud_sum)
 
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out
         # state[tile.id]['temperature'] -= self_adjust_temperature
-        # state[tile.id]['air_pressure'] -= self_adjust_pressure
+        # state[tile.id]['sea_level_air_pressure'] -= self_adjust_pressure
 
 def distribution_water_flow(grid, config, state, prev_state):
     # calculate every tile's precipitation and initial water flow
@@ -670,14 +733,17 @@ def distribution_water_flow(grid, config, state, prev_state):
             state[tile.id]['cloud_content']
         )
 
-        # adjust vapor content and set water flow based on how much it rained
+        # adjust cloud content and set water flow based on how much it rained
         # these, along with precipitation, are all referenced in kg per area, so it's a straight conversion
         # NOTE: technically, water_flow is per area and per second, but we're ignore the per second part for now, we could take any time reference we wanted, since we never actually work with time
-        state[tile.id]['vapor_content'] -= state[tile.id]['precipitation']
+        state[tile.id]['cloud_content'] -= state[tile.id]['precipitation']
         if not is_sea_tile(tile, config): # sea tiles don't have water flow
             state[tile.id]['water_flow'] = state[tile.id]['precipitation']
         else:
             state[tile.id]['water_flow'] = 0
+
+    if state[tile.id]['cloud_content'] < 0:
+        print(state[tile.id]['cloud_content'])
 
     # queue = every tile on the map which is above sea level, sorted by altitude (highest first)
     queue = sorted([tile for tile in grid.tiles if not is_sea_tile(tile, config)], key=lambda tile: tile.altitude, reverse=True)
@@ -738,15 +804,16 @@ def iterate_climate(grid, config, prev_state):
     all_temperature(grid, config, state, prev_state)
     if config['climate']['smoothen_temperature_map']:
         smoothen_temperature(grid, config, state, prev_state)
-    all_air_pressure(grid, config, state, prev_state)
+    all_surface_air_pressure(grid, config, state, prev_state)
+    all_sea_level_air_pressure(grid, config, state, prev_state)
     all_vapor_capacity(grid, config, state, prev_state)
     all_vapor_content(grid, config, state, prev_state) # this one also depends on prev_state, but only on itself
     all_cloud_content(grid, config, state, prev_state)
-        
-    # calculate wind
-    all_wind(grid, config, state, prev_state)
-    # distribute stuff via wind
-    distribution_wind(grid, config, state, prev_state)
+    
+    # # calculate wind
+    # all_wind(grid, config, state, prev_state)
+    # # distribute stuff via wind
+    # distribution_wind(grid, config, state, prev_state)
     
     # calculate precipitation, adjust cloud density, distribute water flow throughout the world
     distribution_water_flow(grid, config, state, prev_state)
@@ -765,7 +832,7 @@ def starting_state(grid, config):
     # evapotranspiration        - Yes         - As 0
     # plant_humidity_absorption - Yes         - As 0
     # vapor_content             - No          - Yes
-    # air_pressure              - No          - Yes
+    # sea_level_air_pressure              - No          - Yes
     # cloud_content             - No          - Yes
     # biomass                   - Yes         - As 0
     # wind                      - No          - No
@@ -779,8 +846,8 @@ def starting_state(grid, config):
 
         state[tile.id]['temperature'] = calculate_temperature_init(
             config,
-            state[tile.id]['solar_radiation'],
-            tile.altitude
+            tile.altitude,
+            state[tile.id]['solar_radiation']
         )
 
         state[tile.id]['vapor_capacity'] = calculate_vapor_capacity_init(
@@ -794,11 +861,18 @@ def starting_state(grid, config):
             state[tile.id]['vapor_capacity']
         )
         
-        state[tile.id]['air_pressure'] = calculate_air_pressure_init(
+        state[tile.id]['surface_air_pressure'] = calculate_surface_air_pressure_init(
             config,
             state[tile.id]['temperature'],
             tile.altitude,
             calculate_temperature_init(config, 0, 0) + 273.15 # TODO - think about this
+        )
+
+        state[tile.id]['sea_level_air_pressure'] = calculate_sea_level_air_pressure(
+            config,
+            state[tile.id]['temperature'],
+            tile.altitude,
+            state[tile.id]['surface_air_pressure']
         )
         
         state[tile.id]['cloud_content'] = calculate_cloud_content_init(
