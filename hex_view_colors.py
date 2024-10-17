@@ -53,6 +53,8 @@ def color_clouds(viewTile, config):
 def color_humidity(viewTile, config):
     if 'vapor_content' not in viewTile.tile.grid.climate_data[viewTile.tile.id] or 'vapor_capacity' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
         return BLACK, RED, RED
+    if viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity'] == 0:
+        return BLACK, RED, RED        
     humidity = viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_content'] / viewTile.tile.grid.climate_data[viewTile.tile.id]['vapor_capacity']
     if humidity < 0:
         return BLACK, RED, RED
@@ -70,9 +72,9 @@ def color_humidity(viewTile, config):
 def color_sea_pressure(viewTile, config):
     if 'sea_level_air_pressure' not in viewTile.tile.grid.climate_data[viewTile.tile.id]:
         return BLACK, RED, RED
-    min_pressure = 91325 # 
+    min_pressure = 96325 # 
     ref_pressure = 101325 # sea level
-    max_pressure = 111325 # approximate, assuming sea level is normally around 101325 Pa
+    max_pressure = 106325 # approximate, assuming sea level is normally around 101325 Pa
     pressure = viewTile.tile.grid.climate_data[viewTile.tile.id]['sea_level_air_pressure']
     value = min(1.0, max(0.0, (pressure - min_pressure)/(max_pressure - min_pressure)))
 
@@ -96,7 +98,7 @@ def color_temperature(viewTile, config):
     color_stops = [
         (0.0, WHITE), # FREEZING
         (0.5, BLUE),  # cold but mid (intended to be 0º)
-        (0.75, PURPLE), # ideal (intended to be 25º)
+        (0.65, PURPLE), # ideal (intended to be 15º)
         (1.0, RED)    # HOT
     ]
     color = interpolate_color(value, color_stops)
