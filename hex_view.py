@@ -33,17 +33,34 @@ class HexViewTile:
         pygame.draw.polygon(screen, outline_color, screen_corners, 2)
     
         # Prepare label
-        text_surface = text_label_from_tile(self.tile, label_color, camera)
-        if text_surface is not None:
-            text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
-            screen.blit(text_surface, text_rect)
+        # text_surface = text_label_from_tile(self.tile, label_color, camera)
+        # if text_surface is not None:
+        #     text_rect = text_surface.get_rect(center=camera.world_to_screen(self.center))
+        #     screen.blit(text_surface, text_rect)
         
+    def contains_point(self, point):
+        """
+        Determine if the given point (world coordinates) is inside this hexagon.
+        Uses the ray casting algorithm.
+        """
+        corners = self.get_corners()
+        num = len(corners)
+        j = num - 1
+        inside = False
+        for i in range(num):
+            xi, yi = corners[i]
+            xj, yj = corners[j]
+            if ((yi > point[1]) != (yj > point[1])):
+                intersect = (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi + 1e-10) + xi)
+                if intersect:
+                    inside = not inside
+            j = i
+        return inside
+
 
 class HexView:
-    def __init__(self, hexgrid, size, func_color, config, offset_x=100, offset_y=100):
+    def __init__(self, hexgrid, size, func_color, config):
         self.grid = hexgrid
-        self.offset_x = offset_x
-        self.offset_y = offset_y
         self.size = size
         self.func_color = func_color
         self.config = config
@@ -56,8 +73,8 @@ class HexView:
             HexViewTile(
                 tile,
                 (
-                    self.offset_x + tile.col * HORIZONTAL_SPACING,
-                    (self.offset_y + tile.row * VERTICAL_SPACING) 
+                    tile.col * HORIZONTAL_SPACING,
+                    tile.row * VERTICAL_SPACING
                     - (VERTICAL_SPACING / 2 if tile.col % 2 == 0 else 0)
                 ),
                 self

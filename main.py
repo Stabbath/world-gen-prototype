@@ -108,7 +108,7 @@ def gen_views(config, hex_grid):
     hex_views = {}
     for key in hex_view_color_map.keys():
         func = hex_view_color_map[key]
-        hex_views[key] = HexView(hex_grid, size=HEX_SIZE, func_color=func, config=config, offset_x=100, offset_y=100)
+        hex_views[key] = HexView(hex_grid, size=HEX_SIZE, func_color=func, config=config)
     return hex_views
 
 def gen_world(config):
@@ -118,6 +118,11 @@ def gen_world(config):
     )
     return hex_grid
 
+def print_tile_info(tile):
+    climate = tile.grid.climate_data
+    print('Tile', tile.col, ',', tile.row)
+    print('Vapor', int(climate[tile.id]['vapor_content'] / 1000000), 'M /', int(climate[tile.id]['vapor_capacity'] / 1000000), 'M')
+    print('Humidity', (climate[tile.id]['vapor_content'] / climate[tile.id]['vapor_capacity'] * 100), '%')
 
 # ------------------------------
 # Pygame Initialization and Main Loop
@@ -137,8 +142,11 @@ def main():
         clock = pygame.time.Clock()
 
         # Initialize Camera
-        camera = Camera(zoom=1.0, offset=(0, 0), min_zoom=MIN_ZOOM, max_zoom=MAX_ZOOM)
-
+        camera = Camera(zoom=1.0, 
+                        offset=(- PANEL_WIDTH, - TABS_HEIGHT * 2),
+                        min_zoom=MIN_ZOOM, 
+                        max_zoom=MAX_ZOOM)
+        
         # Variables for panning
         is_panning = False
         pan_start_pos = pygame.math.Vector2(0, 0)
@@ -167,7 +175,7 @@ def main():
 
 #        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
         tab_panel = TabPanel(VIEW_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING)
-        overlay_panel = TabPanel(OVERLAY_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING, TAB_BUTTON_HEIGHT + TAB_BUTTON_PADDING)
+        overlay_panel = TabPanel(OVERLAY_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING, TABS_HEIGHT)
         
         # Main view rectangle adjusted to not overlap with tab buttons
         main_view_rect = pygame.Rect(PANEL_WIDTH, TABS_HEIGHT, SCREEN_WIDTH - PANEL_WIDTH, SCREEN_HEIGHT - TABS_HEIGHT)
@@ -199,6 +207,22 @@ def main():
                     else:
                         # Check if mouse is over the main view pane
                         if main_view_rect.collidepoint(event.pos):
+                            mouse_pos = pygame.math.Vector2(event.pos)
+                            # Convert screen coordinates to world coordinates
+                            # Adjust for the main view pane's position
+                            adjusted_screen_pos = mouse_pos - pygame.math.Vector2(main_view_rect.topleft)
+                            world_pos = camera.screen_to_world(adjusted_screen_pos)
+
+                            # Iterate through all tiles in the current view to find which one contains the point
+                            clicked_tile = None
+                            for tile in hex_views[current_tab].tiles:
+                                if tile.contains_point(world_pos):
+                                    clicked_tile = tile
+                                    break
+
+                            if clicked_tile:
+                                print_tile_info(clicked_tile.tile)
+                                
                             if event.button == 4:  # Mouse wheel up to zoom in
                                 mouse_pos = event.pos
                                 camera.adjust_zoom(ZOOM_STEP, mouse_pos)
@@ -243,16 +267,8 @@ def main():
                 main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height), pygame.SRCALPHA)
                 main_view_surface.fill(BACKGROUND_COLOR)  # Background color
     
-                # Adjust camera offset to consider the main view pane position
-                adjusted_camera = Camera(
-                    zoom=camera.zoom,
-                    offset=(camera.offset[0] - PANEL_WIDTH, camera.offset[1] - TABS_HEIGHT),
-                    min_zoom=MIN_ZOOM,
-                    max_zoom=MAX_ZOOM
-                )
-    
                 # Draw the hex grid itself
-                hex_views[current_tab].draw(main_view_surface, adjusted_camera)
+                hex_views[current_tab].draw(main_view_surface, camera)
     
                 # Draw overlays if an overlay is selected
                 if current_overlay != "None" and current_overlay in OVERLAY_FUNCTIONS:
@@ -263,7 +279,7 @@ def main():
                     for tile in hex_views[current_tab].tiles:
                         overlay_color = hex_view_color_map[current_tab](tile, config)[2]  # Get overlay color from the map
                         # Get the overlay element for the tile
-                        overlay_element = overlay_func(tile.tile, hex_grid.climate_data, ref_value, draw_size, overlay_color, adjusted_camera)
+                        overlay_element = overlay_func(tile.tile, hex_grid.climate_data, ref_value, draw_size, overlay_color, camera)
                         if overlay_element:
                             x = tile.tile.col * HORIZONTAL_SPACING
                             y = tile.tile.row * VERTICAL_SPACING - (VERTICAL_SPACING / 2 if tile.tile.col % 2 == 0 else 0)
@@ -271,7 +287,7 @@ def main():
                             # Blit the overlay element onto the main view surface
                             main_view_surface.blit(
                                 overlay_element,
-                                adjusted_camera.world_to_screen((x, y))
+                                camera.world_to_screen((x, y))
                             )
     
                 # Blit the main view surface onto the screen at the correct position

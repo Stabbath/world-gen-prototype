@@ -12,6 +12,12 @@ class Camera:
             (pos[0] * self.zoom) + self.offset.x,
             (pos[1] * self.zoom) + self.offset.y
         )
+    
+    def screen_to_world(self, pos):
+        return (
+            (pos[0] - self.offset.x)/self.zoom,
+            (pos[1] - self.offset.y)/self.zoom
+        )
 
     def adjust_zoom(self, zoom_change, mouse_pos):
         # Calculate the world coordinates before zoom
