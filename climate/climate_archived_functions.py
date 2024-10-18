@@ -1,6 +1,11 @@
+import math
+
+from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio
+
 # ============ #
 # === WIND === #
 # ============ #
+
 # === WIND - v0 === #
 # First attempt, kind of jumped headfirst into it, overly complex and got lost in the details
 # Hard to debug and finetune a model that starts too complex
