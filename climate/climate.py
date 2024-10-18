@@ -40,6 +40,11 @@ import math
 # - no water humidity absorption
 # ... what else ?
 
+# TODO - IMPORTANT - SIMPLE PLAN NEXT STEPS
+# change how we model humidity?
+# for example, sea tiles could just be pure humidity generators, so they never receive any humidity from winds
+#   and humidity in a sea tile would just depend on temperature I guess. Warmer = more evaporation.
+
 
 # === UTILS ===
 def vector_magnitude(x, y):
@@ -954,14 +959,15 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
     # all_wind and distribution joined into one function
     # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
     # this is because vapor on the map was being spread along straight lines because of winds, and so creating a very unsmooth map for humidity
+    # additionally, we propagate wind itself, so they dont die off too quickly upon hitting a landmass or stable pressure area
     wind_friction_altitude = config['climate']['wind_friction_altitude']
     wind_friction_biomass = config['climate']['wind_friction_biomass']
     distance_between_tiles = config['climate']['distance_between_tiles']
+    planet_angular_velocity = config['climate']['planet_angular_velocity']
     pressure_gradient_to_wind_factor = 100
 
     # cumulative wind
     incoming_winds = {}
-    local_pressure_winds = {}
     for tile in grid.tiles:
         incoming_winds[tile.id] = [0, 0]
 
@@ -1006,8 +1012,17 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
             wind *= (1.0 - friction)
 
             direction_vector = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
-            incoming_winds[neighbor.id][0] += direction_vector[0] * wind
-            incoming_winds[neighbor.id][1] += direction_vector[1] * wind
+
+            # apply coriolis effect to the outgoing wind stream (the neighbor's incoming)
+            coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude(tile) * math.pi / 2)
+            # coriolis direction is perpendicular to the wind direction
+            coriolis_speed = normalize_vector(direction_vector[1], -direction_vector[0])
+            # wind speed cancels out when applying coriolis force over a distance, so we just need the coriolis parameter and distance
+            coriolis_speed_magnitude = coriolis_parameter * distance_between_tiles
+            coriolis_speed = [coriolis_speed[0] * coriolis_speed_magnitude, coriolis_speed[1] * coriolis_speed_magnitude]
+
+            incoming_winds[neighbor.id][0] += direction_vector[0] * wind + coriolis_speed[0]
+            incoming_winds[neighbor.id][1] += direction_vector[1] * wind + coriolis_speed[1]
 
             neighbors_winds.append((neighbor, wind))
 
@@ -1030,8 +1045,6 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
         vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
         cloud_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_cloud_transfer_speed'])
         cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
-
-        print('vapor_wind_ratio', vapor_wind_ratio, 'cloud_wind_ratio', cloud_wind_ratio)
 
         for neighbor, wind in neighbors_winds:
             # calculate how much to transfer to this one neighbor
@@ -1072,7 +1085,7 @@ def iterate_climate_simplified(grid, config, prev_state):
         state[tile.id]['biomass'] = 0
 
     # WINDS!
-    distribution_wind_simple_v2(grid, config, state, prev_state)
+    distribution_wind_simple_v3(grid, config, state, prev_state)
 
     # for tile in grid.tiles:
     #     state[tile.id]['water_flow'] = state[tile.id]['cloud_content'] * 0.5
@@ -1103,8 +1116,3 @@ def generate_climate_simplified(grid, config):
         state = iterate_climate_simplified(grid, config, prev_state)
 
     return state
-
-# TODO - IMPORTANT - SIMPLE PLAN NEXT STEPS
-# change how we model humidity?
-# for example, sea tiles could just be pure humidity generators, so they never receive any humidity from winds
-#   and humidity in a sea tile would just depend on temperature I guess. Warmer = more evaporation.
