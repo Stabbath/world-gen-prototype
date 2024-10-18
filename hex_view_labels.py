@@ -39,23 +39,40 @@ def wind_overlay_element(tile, climate_data, ref_magnitude, draw_size, color, ca
     # Calculate angle for wind direction
     angle = math.atan2(wind[1], wind[0])
     
-    # Create an arrow representation (a line with a triangle at the end)
-    length = size
-    end_pos = (tile.col + length * math.cos(angle), tile.row + length * math.sin(angle))
+    # Create a triangle centered at the tile's position
+    triangle_surface = pygame.Surface((draw_size, draw_size), pygame.SRCALPHA)
     
-    # Draw a line for wind direction
-    line_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-    pygame.draw.line(line_surface, color, (tile.col, tile.row), end_pos, 2)
+    # Triangle dimensions (scaled based on wind magnitude)
+    triangle_height = size
+    triangle_base = size * 0.5
     
-    # Draw the arrow head
-    arrow_size = size * 0.3
-    arrow_angle1 = angle + math.pi / 6  # Angle for one side of the arrowhead
-    arrow_angle2 = angle - math.pi / 6  # Angle for the other side
-    point1 = (end_pos[0] + arrow_size * math.cos(arrow_angle1), end_pos[1] + arrow_size * math.sin(arrow_angle1))
-    point2 = (end_pos[0] + arrow_size * math.cos(arrow_angle2), end_pos[1] + arrow_size * math.sin(arrow_angle2))
-    pygame.draw.polygon(line_surface, color, [end_pos, point1, point2])
+    # Calculate the center of the tile (camera can adjust the position if needed)
+    center_x = tile.col  # Adjust this with camera logic if needed
+    center_y = tile.row  # Adjust this with camera logic if needed
     
-    return line_surface
+    # Calculate the points of the triangle
+    # The first point is at the tip of the triangle (pointing in the wind's direction)
+    tip_x = center_x + triangle_height * math.cos(angle)
+    tip_y = center_y + triangle_height * math.sin(angle)
+    
+    # The other two points form the base of the triangle, at an angle from the tip
+    base_angle1 = angle + math.pi / 2
+    base_angle2 = angle - math.pi / 2
+    
+    base_point1_x = center_x + (triangle_base / 2) * math.cos(base_angle1)
+    base_point1_y = center_y + (triangle_base / 2) * math.sin(base_angle1)
+    
+    base_point2_x = center_x + (triangle_base / 2) * math.cos(base_angle2)
+    base_point2_y = center_y + (triangle_base / 2) * math.sin(base_angle2)
+    
+    # Draw the triangle
+    pygame.draw.polygon(triangle_surface, color, [
+        (tip_x, tip_y), 
+        (base_point1_x, base_point1_y), 
+        (base_point2_x, base_point2_y)
+    ])
+    
+    return triangle_surface
 
 def water_flow_overlay_element(tile, climate_data, ref_flow, draw_size, color, camera):
     flow = climate_data[tile.id]['water_flow']
