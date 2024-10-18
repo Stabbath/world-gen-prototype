@@ -63,8 +63,8 @@ OVERLAY_REF = {
 }
 
 OVERLAY_DRAW_SIZE = {
-    "Wind": 20,
-    "Water Flow": 30
+    "Wind": 400,
+    "Water Flow": 100
 }
 
 
@@ -123,6 +123,7 @@ def print_tile_info(tile):
     print('Tile', tile.col, ',', tile.row)
     print('Vapor', int(climate[tile.id]['vapor_content'] / 1000000), 'M /', int(climate[tile.id]['vapor_capacity'] / 1000000), 'M')
     print('Humidity', (climate[tile.id]['vapor_content'] / climate[tile.id]['vapor_capacity'] * 100), '%')
+    print('Wind', climate[tile.id]['wind'], 'm/s')
 
 # ------------------------------
 # Pygame Initialization and Main Loop
@@ -281,13 +282,10 @@ def main():
                         # Get the overlay element for the tile
                         overlay_element = overlay_func(tile.tile, hex_grid.climate_data, ref_value, draw_size, overlay_color, camera)
                         if overlay_element:
-                            x = tile.tile.col * HORIZONTAL_SPACING
-                            y = tile.tile.row * VERTICAL_SPACING - (VERTICAL_SPACING / 2 if tile.tile.col % 2 == 0 else 0)
-
                             # Blit the overlay element onto the main view surface
                             main_view_surface.blit(
                                 overlay_element,
-                                camera.world_to_screen((x, y))
+                                camera.world_to_screen(tile.center)
                             )
     
                 # Blit the main view surface onto the screen at the correct position

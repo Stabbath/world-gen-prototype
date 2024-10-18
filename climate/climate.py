@@ -36,7 +36,7 @@ import math
 # - set them all to "basic", and try simulating based on that
 # implementation guide for "basic" calculations:
 # - no evaporation
-# - no evapotranspiration
+# - no transpiration
 # - no water humidity absorption
 # ... what else ?
 
@@ -125,7 +125,7 @@ def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
     # Handle edge case if the angle is exactly aligned with one direction
     coords = (q + AXIAL_DIRECTIONS[0][0], r + AXIAL_DIRECTIONS[0][1])
     neighbor = tile.grid.get_tile(coords[0], coords[1])
-    return neighbor, 1.0
+    return neighbor, 1.0, None, 0.0
 
 
 # === CONFIG CONSTANTS ===
@@ -181,13 +181,13 @@ def default_climate_config():
     config['climate']['water_temperature_constant_ocean'] = 6 # C       : constant to add to temperature to obtain water temperature; for the ocean
     config['climate']['ocean_water_flow_equivalent'] = 1    # kg/m^2/s  : how much water flow a tile needs to have equivalent water flow to an ocean tile, for purposes of calculating evaporation
     config['climate']['cloud_content_for_max_density'] = 10 #           : ratio to convert cloud content into cloud density to determine radiation reduction etc
-    config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on evapotranspiration (below reduces it, above increases it)
+    config['climate']['transpiration_reference_temperature'] = 25 # C   : temperature which has a neutral effect on transpiration (below reduces it, above increases it)
     config['climate']['wind_friction_altitude'] = 0.0005    #           : how much friction is added per meter of altitude difference
     config['climate']['wind_friction_biomass'] = 0.0005     #           : how much friction is added per kg of biomass per surface
     config['climate']['specific_gas_constant_for_air'] = 287.058 # J/(kg.K) : specific gas constant for dry air
     config['climate']['planet_angular_velocity'] = 0.000072921 # rad / s : angular velocity of the planet
-    config['climate']['winds_max_vapor_transfer_speed'] = 10 # m/s      : wind speed required to transfer all of the appropriate variable out of a tile
-    config['climate']['winds_max_cloud_transfer_speed'] = 25 # m/s      : ""
+    config['climate']['winds_max_vapor_transfer_speed'] = 1#10 # m/s      : wind speed required to transfer all of the appropriate variable out of a tile
+    config['climate']['winds_max_cloud_transfer_speed'] = 2.5#25 # m/s      : ""
     config['climate']['winds_max_pressure_transfer_speed'] = 30 # m/s   : ""
     config['climate']['winds_max_temperature_transfer_speed'] = 15 # m/s : ""
     config['climate']['winds_max_vapor_transfer_ratio'] = 0.5 #         : how much of the variable is transferred by the wind at max wind
@@ -207,7 +207,7 @@ units = {
     "vapor_capacity": "kg/m^2", # Maximum amount of water vapor in the air, per unit of surface area
     "vapor_content": "kg/m^2", # Amount of water vapor in the air, per unit of surface area
     "evaporation": "kg/m^2/s", # Water mass evaporated per second per unit of surface area
-    "evapotranspiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
+    "transpiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
     "sea_level_air_pressure": "Pa",
     "wind": "m/s",
     "cloud_content": "kg/m^2", # Amount of water in the clouds, per unit of surface area (yearly average)
@@ -357,7 +357,7 @@ def _temperature_growth_factor(config, temperature):
         return 0.0
 
 # one_kilo_intake_reference = water a standard 1kg plant can take per second. Default value is basically 1 kg per day scaled down to seconds
-def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_absorption, water_flow, solar_radiation, temperature, is_sea_tile):
+def calculate_biomass(config, prev_biomass, transpiration, plant_humidity_absorption, water_flow, solar_radiation, temperature, is_sea_tile):
     solar_constant = config['climate']['solar_constant']
     solar_conversion_rate = config['climate']['solar_conversion_rate']
     photosynthesis_radiation_ratio = config['climate']['photosynthesis_radiation_ratio']
@@ -380,7 +380,7 @@ def calculate_biomass(config, prev_biomass, evapotranspiration, plant_humidity_a
     # some plants also take in water from air humidity
     humidity_intake = plant_humidity_absorption
     # the plant loses water through transpiration
-    transpiration_loss = evapotranspiration 
+    transpiration_loss = transpiration 
     # resulting in a net intake (or outtake)
     available_water = ground_water + humidity_intake - transpiration_loss
     # however, there is a maximum amount it can actually use, depending on its biomass
@@ -500,7 +500,7 @@ def calculate_sea_level_air_pressure(config, temperature, altitude, surface_pres
     return pressure
     
 # plants lose water to the air
-def calculate_evapotranspiration(config, biomass, temperature, vapor_content, vapor_capacity):
+def calculate_transpiration(config, biomass, temperature, vapor_content, vapor_capacity):
     transpiration_rate = config['climate']['plant_transpiration']
     transpiration_reference_temperature = config['climate']['transpiration_reference_temperature']
 
@@ -541,8 +541,8 @@ def calculate_evaporation(config, water_flow, temperature, vapor_content, vapor_
         evaporation = evaporation * water_flow / ocean_water_flow_equivalent
     return evaporation
 
-def calculate_vapor_content(config, prev_vapor_content, evaporation, evapotranspiration, plant_humidity_absorption):
-    return prev_vapor_content + evaporation + evapotranspiration - plant_humidity_absorption
+def calculate_vapor_content(config, prev_vapor_content, evaporation, transpiration, plant_humidity_absorption):
+    return prev_vapor_content + evaporation + transpiration - plant_humidity_absorption
 
 
 # === ITERATIVE FUNCTIONS ===
@@ -562,7 +562,7 @@ def all_biomass(grid, config, state, prev_state):
         state[tile.id]['biomass'] = calculate_biomass(
             config,
             prev_state[tile.id]['biomass'],
-            prev_state[tile.id]['evapotranspiration'],
+            prev_state[tile.id]['transpiration'],
             prev_state[tile.id]['plant_humidity_absorption'],
             prev_state[tile.id]['water_flow'],
             prev_state[tile.id]['solar_radiation'],
@@ -611,13 +611,13 @@ def all_vapor_content(grid, config, state, prev_state):
             config,
             prev_state[tile.id]['vapor_content'],
             state[tile.id]['evaporation'],
-            state[tile.id]['evapotranspiration'],
+            state[tile.id]['transpiration'],
             state[tile.id]['plant_humidity_absorption']
         )
 
-def all_evapotranspiration(grid, config, state, prev_state):
+def all_transpiration(grid, config, state, prev_state):
     for tile in grid.tiles:
-        state[tile.id]['evapotranspiration'] = calculate_evapotranspiration(
+        state[tile.id]['transpiration'] = calculate_transpiration(
             config,
             prev_state[tile.id]['biomass'],
             prev_state[tile.id]['temperature'],
@@ -698,8 +698,7 @@ def all_wind(grid, config, state, prev_state):
         # print('wind', geostrophic_wind)
 
         # then we divide this wind into 2, proportionally, for the 2 tiles towards which it's pointing
-        result = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
-        neighbor1, ratio1, neighbor2, ratio2 = (result + (None, 0)) if len(result) == 2 else result
+        neighbor1, ratio1, neighbor2, ratio2 = vector_to_flat_hex_neighbors_and_ratio(tile, geostrophic_wind)
 
         # sometimes even our only neighbor migh be None: if we get a wind straight up into the pole, for example
         if not neighbor1:
@@ -843,7 +842,7 @@ def distribution_water_flow(grid, config, state, prev_state):
 #   1.1 solar radiation - from previous state's cloud density (its not too important to have the most accurate factor here)
 #   1.2 biomass
 #   1.3 evaporation                # based on the previous water cycle
-#   1.4 evapotranspiration         #
+#   1.4 transpiration         #
 #   1.5 plant_humidity_absorption  #
 
 # 2. our mega strongly-connected component
@@ -872,7 +871,7 @@ def iterate_climate(grid, config, prev_state):
     all_solar_radiation(grid, config, state, prev_state)
     all_biomass(grid, config, state, prev_state)
     all_evaporation(grid, config, state, prev_state)
-    all_evapotranspiration(grid, config, state, prev_state)
+    all_transpiration(grid, config, state, prev_state)
     all_plant_humidity_absorption(grid, config, state, prev_state)
     
     # fresh variables - based on variables from this same state
@@ -904,7 +903,7 @@ def starting_state(grid, config):
     # temperature               - Yes         - Yes
     # vapor_capacity            - Yes         - Yes
     # evaporation               - No          - As 0
-    # evapotranspiration        - Yes         - As 0
+    # transpiration             - Yes         - As 0
     # plant_humidity_absorption - Yes         - As 0
     # vapor_content             - No          - Yes
     # sea_level_air_pressure              - No          - Yes
@@ -957,7 +956,7 @@ def starting_state(grid, config):
         )
 
         state[tile.id]['evaporation'] = 0.0
-        state[tile.id]['evapotranspiration'] = 0.0
+        state[tile.id]['transpiration'] = 0.0
         state[tile.id]['plant_humidity_absorption'] = 0.0
         state[tile.id]['biomass'] = 0.0
         state[tile.id]['water_flow'] = 0.0
@@ -1093,12 +1092,22 @@ def distribution_wind_simple_v2(grid, config, state, prev_state):
     distance_between_tiles = config['climate']['distance_between_tiles']
     pressure_gradient_to_wind_factor = 100
 
+    # cumulative wind
+    incoming_winds = {}
+    local_pressure_winds = {}
+    for tile in grid.tiles:
+        incoming_winds[tile.id] = [0, 0]
+
     # queue = every tile on the map, sorted by air pressure (highest first)
     queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'], reverse=True)
     while queue:
         tile = queue.pop(0)
         sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
         
+        incoming_wind = incoming_winds[tile.id]
+        neighbor1, ratio1, neighbor2, ratio2 = vector_to_flat_hex_neighbors_and_ratio(tile, incoming_wind)
+        incoming_wind_magnitude = vector_magnitude(incoming_wind[0], incoming_wind[1])
+
         neighbors_winds = []
         for neighbor in tile.get_neighbors():
             neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
@@ -1107,9 +1116,15 @@ def distribution_wind_simple_v2(grid, config, state, prev_state):
             if neighbor_pressure > sea_level_air_pressure:
                 continue
 
-            pressure_gradient = (sea_level_air_pressure - neighbor_pressure) / distance_between_tiles
+            pressure_gradient_1d = (sea_level_air_pressure - neighbor_pressure) / distance_between_tiles
 
-            wind = pressure_gradient * pressure_gradient_to_wind_factor
+            wind = pressure_gradient_1d * pressure_gradient_to_wind_factor
+
+            # add incoming winds if appropriate,  based on the direction of incoming wind
+            if neighbor == neighbor1:
+                wind += incoming_wind_magnitude * ratio1
+            elif neighbor == neighbor2:
+                wind += incoming_wind_magnitude * ratio2
 
             # winds are slowed down by friction
             friction = 0.0
@@ -1123,15 +1138,28 @@ def distribution_wind_simple_v2(grid, config, state, prev_state):
 
             wind *= (1.0 - friction)
 
+            direction_vector = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
+            incoming_winds[neighbor.id][0] += direction_vector[0] * wind
+            incoming_winds[neighbor.id][1] += direction_vector[1] * wind
+
             neighbors_winds.append((neighbor, wind))
 
+        wind_vector = [0, 0]
         combined_wind = 0
         for neighbor, wind in neighbors_winds:
             combined_wind += wind
 
+            # the wind vector calculation is just for display on the map
+            direction_vector = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
+            wind_vector[0] += direction_vector[0] * wind
+            wind_vector[1] += direction_vector[1] * wind
+        state[tile.id]['wind'] = wind_vector
+
         if combined_wind == 0:
             continue
-        
+
+
+
         # calculate how much of each variable to transfer out
         vapor_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_vapor_transfer_speed'])
         vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
@@ -1171,9 +1199,9 @@ def iterate_climate_simplified(grid, config, prev_state):
         # vapor content in kg, for entire tile
         state[tile.id]['vapor_content'] = simple_vapor_content(config, prev_state[tile.id]['vapor_content'], state[tile.id]['evaporation'])
         # cloud content in kg, for entire tile
-        cloud_gain = simple_cloud_content_gain(config, state[tile.id]['vapor_content'], state[tile.id]['vapor_capacity'])
-        state[tile.id]['vapor_content'] -= cloud_gain
-        state[tile.id]['cloud_content'] = prev_state[tile.id]['cloud_content'] + cloud_gain
+        # cloud_gain = simple_cloud_content_gain(config, state[tile.id]['vapor_content'], state[tile.id]['vapor_capacity'])
+        # state[tile.id]['vapor_content'] -= cloud_gain
+        state[tile.id]['cloud_content'] = 0 #prev_state[tile.id]['cloud_content'] + cloud_gain
 
         # bio-dead world for now
         state[tile.id]['biomass'] = 0
