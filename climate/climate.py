@@ -1,50 +1,41 @@
 import math
 
 # === GENERAL TODO NOTES ===
-# TODO - maybe have to redefine cloud density as cloud vapor content, and model it as vapor going from the air to the clouds
 # TODO - think about Albedo, greenhouse effect, etc for more advanced radiation/temperature modelling
 # TODO - temperature should be tracked as average, minimum, and maximum, probably.
-# TODO - if the map takes too long to stabilize, we can consider adding neighbor smoothing during the generation of the climate (probably not during gameplay)
+#        and/or as a distribution 
 # TODO - add soil quality/minerals as a factor in plant growth (and beyond)
 # TODO - add roughness of terrain as a factor in wind friction (and beyond)
+#       probably do it as a sigma, representing the standard deviation of the height of the terrain in the tile, since the stored altitude is already meant to be the average elevation
 # TODO look into Bulk Aerodynamic Formula for Evaporation: later
 # TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
+#       could make it so temperature averages out with previous iteration
+# TODO - think about modeling air pressure based on air mass...
+#       basically, each tile has a mass of air on top of it, and a "air capacity"
+#       air capacity would be what the mass of air would be so that density = 1.225 kg/m^3
+#       then, air pressure would be the mass of the air above * g / tile area
+#       -> but this only works for *surface* air pressure, which isn't what we want for winds, I don't think
 # TODO - ocean tiles should have a different config var for the temperature smoothing self weight, to make them smooth "faster" and keep them more stable
 # TODO: TEMPERATURE_AT_SEA_LEVEL should maybe be calculated as the average temperature of all sea tiles each iteration
 # TODO - possibly consider two types of wind and air pressure: one for the surface, and one for the upper atmosphere
+#       or just add an atmospheric cell model to directly connect tiles that are far apart from each other
 # TODO - temperature lapse rate can depend on water saturation, look up adiabatic lapse rate.
-# TODO - temperature smoothing should actually move temperature from warmer tiles to colder tiles, instead of averaging them all out. Or is that equivalent?
-# TODO - should add air pressure smoothing working in the same way
 # TODO - winds should be agnostic to distance between tiles; but air pressure gradients depend on that distance. That means the difference in air pressure should itself also be scaled with the distance, perhaps during smoothing
 #       For both air pressure and temperature smoothing, we could consider the temperature of the whole tile to be represented by its average centered on its center point
 #       Then, the farther away each tile center is from its neighbors, the weaker the effect of smoothing
 #       That leads leads to greater distances -> greater differences
 #       So air pressure difference scales with distance
 #       And then in air pressure gradients, the distance cancels out with that
-
-# TODO - IMPORTANT - NEXT STEPS
-# - fix clouds too - they are beyond overcharged
-# - fix humidity - whole world is at 100%
-# - fix biomass
-# * WHILE FIXING THE ABOVE * - look at the note below under "ALSO"
-#
-# - write hexviews for wind and water flow. Use label to draw arrow in the direction of the flow, and color to show the speed
-#       ^ implement it as an "overlay", a second tab menu, where you can select an overlay mode: wind, water flow, or none
-# ALSO:
-# - write alternative, simplified versions of every calculation
-# - define which version to use in the config, using string labels (e.g. "basic")
-# - set them all to "basic", and try simulating based on that
-# implementation guide for "basic" calculations:
-# - no evaporation
-# - no transpiration
-# - no water humidity absorption
-# ... what else ?
-
-# TODO - IMPORTANT - SIMPLE PLAN NEXT STEPS
-# change how we model humidity?
-# for example, sea tiles could just be pure humidity generators, so they never receive any humidity from winds
-#   and humidity in a sea tile would just depend on temperature I guess. Warmer = more evaporation.
-
+# TODO - change how we model humidity?
+#       for example, sea tiles could just be pure humidity generators, so they never receive any humidity from winds
+#       and humidity in a sea tile would just depend on temperature I guess. Warmer = more evaporation.
+#       -> I dont love this, because it would be cool if inland seas could dry out
+#           that would also require tracking the water content in a sea tile, but that's fine, actually an idea i wanted to write down anyway
+# TODO - track water content in sea tile
+#       during init, we calculate the volume of water based on tile area, sea level, and tile altitude (or elevation, rather), with depth = sea level - elevation
+#       based on a standard density of water, we get the mass of water in the tile
+#       then this is affected by evaporation, water flow and rain
+#           I guess the way we'd do it is that we track water flow that would go onto a water tile, and then add that to the entire body of water
 
 # === UTILS ===
 def vector_magnitude(x, y):
@@ -834,21 +825,6 @@ def starting_state(grid, config):
 
     return state
 
-# the actual function supposed to be called from outside this module
-def generate_climate(grid, config):
-    return generate_climate_simplified(grid, config)
-
-    CLIMATE_MAX_ITER = config['climate']['max_iterations']
-    
-    state = starting_state(grid, config)
-
-    for i in range(CLIMATE_MAX_ITER):
-        prev_state = state
-        state = iterate_climate(grid, config, prev_state)
-
-    return state
-
-
 # === SIMPLIFIED MODEL ===
 def simple_temperature(config, baseline, latitude, altitude):
     temp = baseline
@@ -1097,10 +1073,7 @@ def iterate_climate_simplified(grid, config, prev_state):
     return state
 
 # the actual function supposed to be called from outside this module
-def generate_climate_simplified(grid, config):
-    CLIMATE_MAX_ITER = config['climate']['max_iterations']
-    CLIMATE_MAX_ITER = 1
-
+def starting_state_simplified(grid, config):
     state = init_state(grid)
     for tile in grid.tiles: # init the variables that we will need on the first iteration
         state[tile.id]['water_flow'] = 0
@@ -1110,6 +1083,14 @@ def generate_climate_simplified(grid, config):
         state[tile.id]['sea_level_air_pressure'] = 101000
         state[tile.id]['temperature'] = 15
         state[tile.id]['biomass'] = 0
+
+    return state
+
+# the actual function supposed to be called from outside this module
+def generate_climate(grid, config):
+    CLIMATE_MAX_ITER = config['climate']['max_iterations']
+    
+    state = starting_state_simplified(grid, config)
 
     for i in range(CLIMATE_MAX_ITER):
         prev_state = state

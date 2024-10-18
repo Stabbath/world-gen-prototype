@@ -124,6 +124,7 @@ def print_tile_info(tile):
     print('Vapor', int(climate[tile.id]['vapor_content'] / 1000000), 'M /', int(climate[tile.id]['vapor_capacity'] / 1000000), 'M')
     print('Humidity', (climate[tile.id]['vapor_content'] / climate[tile.id]['vapor_capacity'] * 100), '%')
     print('Wind', climate[tile.id]['wind'], 'm/s')
+    print('Water Flow', climate[tile.id]['water_flow'])
 
 # ------------------------------
 # Pygame Initialization and Main Loop
