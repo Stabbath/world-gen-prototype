@@ -50,12 +50,13 @@ def default_config():
     config['generator_consumer']['plate_continental_factor'] = 0.05
     config['generator_consumer']['noise_factor'] = 0.1
     config['generator_consumer']['smoothen_genfactors'] = False
+    config['generator_consumer']['renormalize_genfactors'] = False
+    config['generator_consumer']['normalize_final_altitudes'] = False
     config['generator_consumer']['polar_plates_are_oceanic'] = False
     config['generator_consumer']['continental_plates_count'] = 2
     config['generator_consumer']['continents_count'] = 0
-    config['generator_consumer']['renormalize_genfactors'] = False
     config['generator_consumer']['gen_factor_mu'] = 0
-    config['generator_consumer']['gen_factor_sigma'] = 0.4
+    config['generator_consumer']['gen_factor_sigma'] = 0.1
     
     climate_config = default_climate_config()
     config.update(climate_config)

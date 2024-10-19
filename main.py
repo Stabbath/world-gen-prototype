@@ -118,9 +118,10 @@ def gen_world(config):
     )
     return hex_grid
 
-def print_tile_info(tile):
+def print_tile_info(tile, config):
     climate = tile.grid.climate_data
     print('Tile', tile.col, ',', tile.row)
+    print('Elevation', tile.altitude - config['sea_level'])
     print('Vapor', int(climate[tile.id]['vapor_content'] / 1000000), 'M /', int(climate[tile.id]['vapor_capacity'] / 1000000), 'M')
     print('Humidity', (climate[tile.id]['vapor_content'] / climate[tile.id]['vapor_capacity'] * 100), '%')
     print('Wind', climate[tile.id]['wind'], 'm/s')
@@ -223,7 +224,7 @@ def main():
                                     break
 
                             if clicked_tile:
-                                print_tile_info(clicked_tile.tile)
+                                print_tile_info(clicked_tile.tile, config)
                                 
                             if event.button == 4:  # Mouse wheel up to zoom in
                                 mouse_pos = event.pos

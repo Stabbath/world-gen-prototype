@@ -1,12 +1,11 @@
 import random
 from utils import gaussian_in_range
-from scipy.stats import norm
 
-def generator_consumer_model(grid, config, func_neighbors):
-    return generator_consumer_model_v2(grid, config, func_neighbors)
-
-# v2 - rescale into gaussian
-def generator_consumer_model_v2(grid, config, func_neighbors):
+# === GENERATOR-CONSUMER MODEL ===
+# v1 - has an issue because of the way we do rescaling and renormalizing.
+#       It rescales altitudes up to max altitude, which leads to too much tiles with too high elevation
+#           and kind of cancels out some of the design intent with using gaussian generation factors
+def generator_consumer_model_v1(grid, config, func_neighbors):
     # Straightforward - when we're expanding our plates and run into a filled neighbor, we turn the tile into a fault.
 
     # === Step 2: Assignment of Fault and/or Plate Properties ===
@@ -22,6 +21,7 @@ def generator_consumer_model_v2(grid, config, func_neighbors):
     plate_continental_factor = config['generator_consumer']['plate_continental_factor']
     continental_plates_count = config['generator_consumer']['continental_plates_count']
     RENORMALIZE_GENFACTORS = config['generator_consumer']['renormalize_genfactors']
+    NORMALIZE_FINAL_ALTITUDES = config['generator_consumer']['normalize_final_altitudes']
     gen_factor_sigma = config['generator_consumer']['gen_factor_sigma']
     gen_factor_mu = config['generator_consumer']['gen_factor_mu']
 
@@ -180,25 +180,14 @@ def generator_consumer_model_v2(grid, config, func_neighbors):
             tile.set_altitude(new_altitude)
     
     # Finally, we normalize the altitude of every tile according to MAXALTITUDE, so that the lowest altitude is 0, and the highest altitude is 20000.
-    altitudes = [tile.get_altitude() for tile in grid.get_tiles()]
-    min_altitude = min(altitudes) - 0.0000001 # so that we don't get any 0s (an issue with norm.ppf)
-    max_altitude = max(altitudes) + 0.0000001 # ^
-
-    # first we redistribute it onto a gaussian
-    for tile in grid.get_tiles():
-        alt = tile.get_altitude()
-        normalized_altitude = (alt - min_altitude) / (max_altitude - min_altitude)  # range 0 to 1
-        normalized_altitude = norm.ppf(normalized_altitude) / gen_factor_sigma * MAXGENFACTOR
-        tile.set_altitude(normalized_altitude)
-
-    altitudes = [tile.get_altitude() for tile in grid.get_tiles()]
-    min_altitude = min(altitudes)
-    max_altitude = max(altitudes)
-
-    # then make sure min is 0 and max is maxaltitude
-    for tile in grid.get_tiles():
-        alt = tile.get_altitude()
-        rescaled_altitude = (alt - min_altitude) / (max_altitude - min_altitude) * MAX_ALTITUDE
-        tile.set_altitude(rescaled_altitude)
-
+    if NORMALIZE_FINAL_ALTITUDES:
+        altitudes = [tile.get_altitude() for tile in grid.get_tiles()]
+        min_altitude = min(altitudes)
+        max_altitude = max(altitudes)
+    
+        for tile in grid.get_tiles():
+            alt = tile.get_altitude()
+            normalized_altitude = (alt - min_altitude) / (max_altitude - min_altitude) * MAX_ALTITUDE
+            tile.set_altitude(normalized_altitude)
+            
     return grid

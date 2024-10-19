@@ -2,6 +2,13 @@ import math
 
 from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio
 
+#  TODO - PRIORITY WORK
+# ** Rework altitude generator **
+#       look into statistical distribution of earth's elevations
+# ** Implement my idea for fault method **
+#       expanding each fault from a point in 2 directions. No branching, which is probably the issue gui ran into
+#           possibly, add a "breakout plates" option expanding from fault lines
+
 # TODO notes for the broader project
 # - could define an index-to-neighbor mapping for hex grids, to make it easier to get neighbors and directions
 #       and with it a tile method which returns a neighbor at a specific direction. Or well, I guess the neighbors would already be in an array according to that index and we could just do it directly like that
@@ -9,18 +16,19 @@ from climate.utils import altitude_from_sea_level, normalize_vector, vector_magn
 # === GENERAL TODO NOTES ===
 # TODO - think about Albedo, greenhouse effect, etc for more advanced radiation/temperature modelling
 # TODO - temperature should be tracked as average, minimum, and maximum, probably.
-#        and/or as a distribution 
+#        and/or as a distribution
 # TODO - add soil quality/minerals as a factor in plant growth (and beyond)
 # TODO - add roughness of terrain as a factor in wind friction (and beyond)
 #       probably do it as a sigma, representing the standard deviation of the height of the terrain in the tile, since the stored altitude is already meant to be the average elevation
 # TODO look into Bulk Aerodynamic Formula for Evaporation: later
-# TODO - temperature and air pressure transfer in the wind are commented out because they currently don't matter much, since we calculate them fresh on each iteration
+# TODO - temperature and air pressure transfer over the wind ...
 #       could make it so temperature averages out with previous iteration
 # TODO - think about modeling air pressure based on air mass...
 #       basically, each tile has a mass of air on top of it, and a "air capacity"
 #       air capacity would be what the mass of air would be so that density = 1.225 kg/m^3
 #       then, air pressure would be the mass of the air above * g / tile area
 #       -> but this only works for *surface* air pressure, which isn't what we want for winds, I don't think
+#           it would make it a lot easier to move air around with the winds, though
 # TODO - ocean tiles should have a different config var for the temperature smoothing self weight, to make them smooth "faster" and keep them more stable
 # TODO: TEMPERATURE_AT_SEA_LEVEL should maybe be calculated as the average temperature of all sea tiles each iteration
 # TODO - possibly consider two types of wind and air pressure: one for the surface, and one for the upper atmosphere
@@ -126,8 +134,8 @@ units = {
     "transpiration": "kg/m^2/s", # Water mass evapotranspirated per second per unit of surface area
     "sea_level_air_pressure": "Pa",
     "wind": "m/s",
-    "cloud_content": "kg/m^2", # Amount of water in the clouds, per unit of surface area (yearly average)
-    "precipitation": "kg/m^2", # Average rainfall volume per unit of surface area
+    "cloud_content": "kg", # Amount of water in the clouds, yearly average
+    "precipitation": "kg", # Rainfall by weight, yearly total
     "biomass": "kg/m^2", # Average biomass per unit of surface area
     "plant_humidity_absorption": "kg/m^2/s" # Water taken in by plants directly from the atmosphere
 }
@@ -979,6 +987,7 @@ def iterate_climate_simplified(grid, config, prev_state):
 
         # bio-dead world for now
         state[tile.id]['biomass'] = 0
+        state[tile.id]['water_flow'] = 0
 
     # WINDS!
     distribution_wind_simple_v3(grid, config, state, prev_state)
@@ -1003,6 +1012,7 @@ def starting_state_simplified(grid, config):
         state[tile.id]['sea_level_air_pressure'] = 101000
         state[tile.id]['temperature'] = 15
         state[tile.id]['biomass'] = 0
+        state[tile.id]['water_flow'] = 0
 
     return state
 
