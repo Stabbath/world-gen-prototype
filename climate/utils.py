@@ -29,6 +29,22 @@ def new_state(grid):
         state[tile.id] = {}
     return state
 
+# Adjusted direction vector calculation for flat-topped hex grid
+# specifically, one where 1,0 is placed lower than 0,0
+def get_hex_direction_vector(source_tile, sink_tile):
+    sinkX = sink_tile.col
+    sinkY = sink_tile.row
+    sourceX = source_tile.col
+    sourceY = source_tile.row
+
+    # adjust for the fact that every 2nd column is down half a tile compared to the first, since they're tiles and flat-topped
+    if source_tile.col % 2 == 1:
+        sourceY += 0.5
+    if sink_tile.col % 2 == 1:
+        sinkY += 0.5
+
+    return normalize_vector(sinkX - sourceX, sinkY - sourceY)
+
 # Directions in a flat-topped hex grid (axial coordinates)
 AXIAL_DIRECTIONS = [
     (1, 0),   # Right

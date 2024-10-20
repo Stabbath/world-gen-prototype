@@ -1,6 +1,7 @@
 import math
+import random
 
-from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio
+from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio, get_hex_direction_vector
 
 #  TODO - PRIORITY WORK
 # ** Rework altitude generator **
@@ -757,7 +758,7 @@ def starting_state(grid, config):
 def simple_temperature(config, baseline, latitude, altitude):
     temp = baseline
     temp -= (1 - math.cos(latitude * math.pi / 2)) * 50 # poles are colder
-    temp -= altitude * 0.00065 # normally -6.5ºC per 1000m, made it lower because these current maps have very high altitudes
+    temp -= altitude * 0.0065 # normally -6.5ºC per 1000m, made it lower because these current maps have very high altitudes
     return temp
 
 def simple_air_pressure(config, baseline, latitude, temperature, altitude):
@@ -779,30 +780,31 @@ def simple_air_pressure(config, baseline, latitude, temperature, altitude):
 
     # temperature regions: 50ºC, 30ºC, 15ºC, -20ºC
     if temperature < -20:
-        pressure_from_temperature = baseline * 1.025
+        pressure_from_temperature = baseline * 1.015
     elif temperature < 15:
-        start = baseline * 1.025
+        start = baseline * 1.015
         end = baseline
         ratio = (temperature + 20)/(35)
         pressure_from_temperature = start + ratio * (end - start)
     elif temperature < 30:
         start = baseline
-        end = baseline * 0.99
+        end = baseline * 0.995
         ratio = (temperature - 15)/(15)
         pressure_from_temperature = start + ratio * (end - start)
     elif temperature < 50:
-        start = baseline * 0.99
-        end = baseline * 0.98
+        start = baseline * 0.995
+        end = baseline * 0.99
         ratio = (temperature - 30)/(20)
         pressure_from_temperature = start + ratio * (end - start)
     else:
-        pressure_from_temperature = baseline * 0.98
+        pressure_from_temperature = baseline * 0.99
 
-    pressure = (pressure_from_latitude + pressure_from_temperature) / 2
+    noise = random.uniform(-0.0005, 0.0005) # noise may be important, but has to be very very small
+    pressure = (pressure_from_latitude + pressure_from_temperature) / 2 * (1 + noise)
     
     # altitude effect
     # to encourage winds into mountains, we reduce air pressure at higher altitudes
-    pressure *= (1 - altitude * 0.0000015) # 1% reduction per 1000m
+    # pressure *= (1 - altitude * 0.0000015) # 1% reduction per 1000m
 
     return pressure
     
@@ -859,6 +861,7 @@ def simple_cloud_content_gain(config, vapor_content, vapor_capacity):
         return 0
 
 # v3 adds the coriolis effect
+# also fixed wrong wind direction vector calculation (was looking at coordinates directly, like a square grid, not the flat-topped hex grid positioning with its alternatingly offset columns)
 def distribution_wind_simple_v3(grid, config, state, prev_state):
     # all_wind and distribution joined into one function
     # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
@@ -915,7 +918,7 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
 
             wind *= (1.0 - friction)
 
-            direction_vector = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
+            direction_vector = get_hex_direction_vector(tile, neighbor)
 
             # apply coriolis effect to the outgoing wind stream (the neighbor's incoming)
             coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude(tile) * math.pi / 2)
@@ -936,7 +939,7 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
             combined_wind += wind
 
             # the wind vector calculation is just for display on the map
-            direction_vector = normalize_vector(neighbor.col - tile.col, neighbor.row - tile.row)
+            direction_vector = get_hex_direction_vector(tile, neighbor)
             wind_vector[0] += direction_vector[0] * wind
             wind_vector[1] += direction_vector[1] * wind
         state[tile.id]['wind'] = wind_vector
@@ -1019,6 +1022,7 @@ def starting_state_simplified(grid, config):
 # the actual function supposed to be called from outside this module
 def generate_climate(grid, config):
     CLIMATE_MAX_ITER = config['climate']['max_iterations']
+    CLIMATE_MAX_ITER = 1
     
     state = starting_state_simplified(grid, config)
 
