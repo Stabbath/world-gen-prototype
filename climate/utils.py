@@ -76,6 +76,9 @@ AXIAL_DIRECTIONS = [
 #   0.5 if it points straight to the middle point between 2 neighbors
 #   etc
 def vector_to_flat_hex_neighbors_and_ratio(tile, vector):
+    if vector[0] == 0 and vector[1] == 0:
+        return None, 0.0, None, 0.0
+
     q = tile.col
     r = tile.row
     
