@@ -31,7 +31,8 @@ def new_state(grid):
 
 # Adjusted direction vector calculation for flat-topped hex grid
 # specifically, one where 1,0 is placed lower than 0,0
-def get_hex_direction_vector(source_tile, sink_tile):
+# wraparound: 1 for horizontal, 2 for vertical, 3 for both
+def get_hex_direction_vector(source_tile, sink_tile, wraparound=1):
     sinkX = sink_tile.col
     sinkY = sink_tile.row
     sourceX = source_tile.col
@@ -42,6 +43,21 @@ def get_hex_direction_vector(source_tile, sink_tile):
         sourceY += 0.5
     if sink_tile.col % 2 == 1:
         sinkY += 0.5
+
+    if wraparound & 1:
+        width = source_tile.grid.width
+        if abs(sinkX - sourceX) > width / 2:
+            if sinkX > sourceX:
+                sinkX -= width
+            else:
+                sinkX += width
+    if wraparound & 2:
+        height = source_tile.grid.height
+        if abs(sinkY - sourceY) > height / 2:
+            if sinkY > sourceY:
+                sinkY -= height
+            else:
+                sinkY += height
 
     return normalize_vector(sinkX - sourceX, sinkY - sourceY)
 

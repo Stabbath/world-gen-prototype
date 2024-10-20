@@ -800,7 +800,7 @@ def simple_air_pressure(config, baseline, latitude, temperature, altitude):
         pressure_from_temperature = baseline * 0.99
 
     noise = random.uniform(-0.0005, 0.0005) # noise may be important, but has to be very very small
-    pressure = (pressure_from_latitude + pressure_from_temperature) / 2 * (1 + noise)
+    pressure = pressure_from_latitude # (pressure_from_latitude + pressure_from_temperature) / 2 * (1 + noise) # TODO - disabled for debugging, reenable
     
     # altitude effect
     # to encourage winds into mountains, we reduce air pressure at higher altitudes
@@ -910,13 +910,13 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
             friction = 0.0
             # - however, this is a minor effect at a large scale. But still something I want to include
             # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
-            friction += (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming every 100m difference is 0.05 friction
+            friction += (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming friction is linearly proportional to mean altitude difference
             # but forests also have an effect, so let's look at biomass on this tile
             friction += (state[tile.id]['biomass'] + state[neighbor.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
             # and we apply the friction
             friction = min(1.0, friction)
 
-            wind *= (1.0 - friction)
+            # wind *= (1.0 - friction) # TODO - disabled for debugging, reenable
 
             direction_vector = get_hex_direction_vector(tile, neighbor)
 
@@ -924,7 +924,7 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
             coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude(tile) * math.pi / 2)
             # coriolis direction is perpendicular to the wind direction
             coriolis_speed = normalize_vector(direction_vector[1], -direction_vector[0])
-            # wind speed cancels out when applying coriolis force over a distance, so we just need the coriolis parameter and distance
+            # wind speed cancels out when applying coriolis force over a distance (to get velocity), so we just need the coriolis parameter and distance
             coriolis_speed_magnitude = coriolis_parameter * distance_between_tiles
             coriolis_speed = [coriolis_speed[0] * coriolis_speed_magnitude, coriolis_speed[1] * coriolis_speed_magnitude]
 
