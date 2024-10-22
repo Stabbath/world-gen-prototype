@@ -289,7 +289,7 @@ def main():
                             main_view_surface.blit(
                                 overlay_element,
                                 camera.world_to_screen(tile.center)
-                            )
+                            )   
     
                 # Blit the main view surface onto the screen at the correct position
                 screen.blit(main_view_surface, (PANEL_WIDTH, TABS_HEIGHT))

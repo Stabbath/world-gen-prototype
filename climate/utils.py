@@ -29,6 +29,40 @@ def new_state(grid):
         state[tile.id] = {}
     return state
 
+def xy_to_qrs(x, y):
+    q = x - (y / 2)
+    r = y
+    s = -q - r
+    return q, r, s
+
+def qrs_to_xy(q, r, s):
+    x = q + (r / 2)
+    y = r
+    return x, y
+
+def get_tile_qrs(grid, q, r, s):
+    x, y = qrs_to_xy(q, r, s)
+    return grid.get_tile(x, y)
+
+def aux_coriolis_velocity_qrs(config, normalized_latitude, wind_vector):
+    planet_angular_velocity = config['climate']['planet_angular_velocity']
+    distance_between_tiles = config['climate']['distance_between_tiles']
+
+    if wind_vector[0] < 1e-15 and wind_vector[1] < 1e-15 and wind_vector[2] < 1e-15:
+        return [0, 0, 0]
+
+    # apply coriolis effect to the outgoing wind stream (the neighbor's incoming)
+    coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude * math.pi / 2)
+    xy_buffer = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+    direction_vector = normalize_vector(xy_buffer[0], xy_buffer[1])
+    # coriolis direction is perpendicular to the wind direction
+    coriolis_speed = [direction_vector[1], -direction_vector[0]]
+    # wind speed cancels out in the equation when applying coriolis force over a distance (to get velocity), so we just need the coriolis parameter and distance
+    coriolis_speed_magnitude = coriolis_parameter * distance_between_tiles
+    coriolis_speed = [coriolis_speed[0] * coriolis_speed_magnitude, coriolis_speed[1] * coriolis_speed_magnitude]
+    coriolis_vector = xy_to_qrs(coriolis_speed[0], coriolis_speed[1])
+    return coriolis_vector
+
 # Adjusted direction vector calculation for flat-topped hex grid
 # specifically, one where 1,0 is placed lower than 0,0
 # wraparound: 1 for horizontal, 2 for vertical, 3 for both
@@ -37,12 +71,6 @@ def get_hex_direction_vector(source_tile, sink_tile, wraparound=1):
     sinkY = sink_tile.row
     sourceX = source_tile.col
     sourceY = source_tile.row
-
-    # adjust for the fact that every 2nd column is down half a tile compared to the first, since they're tiles and flat-topped
-    if source_tile.col % 2 == 1:
-        sourceY += 0.5
-    if sink_tile.col % 2 == 1:
-        sinkY += 0.5
 
     if wraparound & 1:
         width = source_tile.grid.width
@@ -58,6 +86,12 @@ def get_hex_direction_vector(source_tile, sink_tile, wraparound=1):
                 sinkY -= height
             else:
                 sinkY += height
+
+    # adjust for the fact that every 2nd column is down half a tile compared to the first
+    if source_tile.col % 2 == 1:
+        sourceY += 0.5
+    if sink_tile.col % 2 == 1:
+        sinkY += 0.5
 
     return normalize_vector(sinkX - sourceX, sinkY - sourceY)
 

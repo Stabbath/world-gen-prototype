@@ -1,7 +1,7 @@
 import math
 import random
 
-from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio, get_hex_direction_vector
+from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio, get_hex_direction_vector, qrs_to_xy, xy_to_qrs, get_tile_qrs, aux_coriolis_velocity_qrs
 
 #  TODO - PRIORITY WORK
 # ** Rework altitude generator **
@@ -585,7 +585,7 @@ def all_cloud_content(grid, config, state, prev_state):
 
 # === DISTRIBUTION FUNCTIONS ===
 def distribution_wind(grid, config, state, prev_state):
-    distribution_wind_simple_v3(grid, config, state, prev_state)
+    distribution_wind_steadystate_v4(grid, config, state, prev_state)
 
 def distribution_water_flow(grid, config, state, prev_state):
     # calculate every tile's precipitation and initial water flow
@@ -860,9 +860,12 @@ def simple_cloud_content_gain(config, vapor_content, vapor_capacity):
     else:
         return 0
 
-# v3 adds the coriolis effect
-# also fixed wrong wind direction vector calculation (was looking at coordinates directly, like a square grid, not the flat-topped hex grid positioning with its alternatingly offset columns)
-def distribution_wind_simple_v3(grid, config, state, prev_state):
+# v4 - calculate winds along q,r,s axes, then convert to x,y
+#   we have some floating-point artifacts still, but in more places now so at least it seems less weird, and they're irrelevant anyway
+#   at the same time, this fixed the coriolis effect issues from v3!
+#
+#   NOTE: this version does not forward winds, assuming a steady state where wind acceleration across tiles is balanced out with wind deceleration from friction
+def distribution_wind_steadystate_v4(grid, config, state, prev_state):
     # all_wind and distribution joined into one function
     # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
     # this is because vapor on the map was being spread along straight lines because of winds, and so creating a very unsmooth map for humidity
@@ -870,13 +873,12 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
     wind_friction_altitude = config['climate']['wind_friction_altitude']
     wind_friction_biomass = config['climate']['wind_friction_biomass']
     distance_between_tiles = config['climate']['distance_between_tiles']
-    planet_angular_velocity = config['climate']['planet_angular_velocity']
     pressure_gradient_to_wind_factor = 100
 
-    # cumulative wind
+    # cumulative wind, in qrs
     incoming_winds = {}
     for tile in grid.tiles:
-        incoming_winds[tile.id] = [0, 0]
+        incoming_winds[tile.id] = [0, 0, 0]
 
     # queue = every tile on the map, sorted by air pressure (highest first)
     queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'], reverse=True)
@@ -884,27 +886,17 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
         tile = queue.pop(0)
         sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
         
-        incoming_wind = incoming_winds[tile.id]
-        neighbor1, ratio1, neighbor2, ratio2 = vector_to_flat_hex_neighbors_and_ratio(tile, incoming_wind)
-        incoming_wind_magnitude = vector_magnitude(incoming_wind[0], incoming_wind[1])
-
         neighbors_winds = []
         for neighbor in tile.get_neighbors():
             neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
             
-            # if the neighbor has higher air pressure, it's not downwind
-            if neighbor_pressure > sea_level_air_pressure:
+            # if the neighbor has same or higher air pressure, it's not downwind
+            if neighbor_pressure >= sea_level_air_pressure:
                 continue
 
             pressure_gradient_1d = (sea_level_air_pressure - neighbor_pressure) / distance_between_tiles
 
             wind = pressure_gradient_1d * pressure_gradient_to_wind_factor
-
-            # add incoming winds if appropriate,  based on the direction of incoming wind
-            if neighbor == neighbor1:
-                wind += incoming_wind_magnitude * ratio1
-            elif neighbor == neighbor2:
-                wind += incoming_wind_magnitude * ratio2
 
             # winds are slowed down by friction
             friction = 0.0
@@ -916,52 +908,61 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
             # and we apply the friction
             friction = min(1.0, friction)
 
-            # wind *= (1.0 - friction) # TODO - disabled for debugging, reenable
+            wind *= (1.0 - friction)
 
-            direction_vector = get_hex_direction_vector(tile, neighbor)
+            # calculate basic wind vector
+            wrapped_direction_vector = get_hex_direction_vector(tile, neighbor)
+            direction_vector_qrs = xy_to_qrs(wrapped_direction_vector[0], wrapped_direction_vector[1])
+            wind_vector = [wind * component for component in direction_vector_qrs]
 
-            # apply coriolis effect to the outgoing wind stream (the neighbor's incoming)
-            coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude(tile) * math.pi / 2)
-            # coriolis direction is perpendicular to the wind direction
-            coriolis_speed = normalize_vector(direction_vector[1], -direction_vector[0])
-            # wind speed cancels out when applying coriolis force over a distance (to get velocity), so we just need the coriolis parameter and distance
-            coriolis_speed_magnitude = coriolis_parameter * distance_between_tiles
-            coriolis_speed = [coriolis_speed[0] * coriolis_speed_magnitude, coriolis_speed[1] * coriolis_speed_magnitude]
+            # add incoming wind
+            # for i, change in enumerate(incoming_wind):
+            #     wind_vector[i] += change
 
-            incoming_winds[neighbor.id][0] += direction_vector[0] * wind + coriolis_speed[0]
-            incoming_winds[neighbor.id][1] += direction_vector[1] * wind + coriolis_speed[1]
+            # coriolis effect
+            coriolis_vector = aux_coriolis_velocity_qrs(config, normalized_latitude(tile), wind_vector)
+            wind_vector[0] += coriolis_vector[0]
+            wind_vector[1] += coriolis_vector[1]
+            wind_vector[2] += coriolis_vector[2]
 
-            neighbors_winds.append((neighbor, wind))
+            incoming_winds[neighbor.id][0] += wind_vector[0]
+            incoming_winds[neighbor.id][1] += wind_vector[1]
+            incoming_winds[neighbor.id][2] += wind_vector[2]
+            
+            neighbors_winds.append((neighbor, wind_vector))
 
-        wind_vector = [0, 0]
-        combined_wind = 0
-        for neighbor, wind in neighbors_winds:
-            combined_wind += wind
+        # x,y wind vector calculation for display on the map
+        combined_wind_vector = [0, 0]
+        # magnitude to determine distribution
+        combined_wind_magnitude = 0
+        for neighbor, wind_vector in neighbors_winds:
+            added_vector = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            combined_wind_vector[0] += added_vector[0]
+            combined_wind_vector[1] += added_vector[1]
+            combined_wind_magnitude += vector_magnitude(added_vector[0], added_vector[1])
+        state[tile.id]['wind'] = combined_wind_vector
 
-            # the wind vector calculation is just for display on the map
-            direction_vector = get_hex_direction_vector(tile, neighbor)
-            wind_vector[0] += direction_vector[0] * wind
-            wind_vector[1] += direction_vector[1] * wind
-        state[tile.id]['wind'] = wind_vector
-
-        if combined_wind == 0:
+        if combined_wind_magnitude == 0:
             continue
 
         # calculate how much of each variable to transfer out
-        vapor_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_vapor_transfer_speed'])
+        vapor_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_vapor_transfer_speed'])
         vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
-        cloud_wind_ratio = min(1.0, combined_wind / config['climate']['winds_max_cloud_transfer_speed'])
+        cloud_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_cloud_transfer_speed'])
         cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
 
-        for neighbor, wind in neighbors_winds:
+        for neighbor, wind_vector in neighbors_winds:
+            xy_buffer = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            wind = vector_magnitude(xy_buffer[0], xy_buffer[1])
             # calculate how much to transfer to this one neighbor
-            vapor_transfer = vapor_out * wind / combined_wind
-            cloud_transfer = cloud_out * wind / combined_wind
+            vapor_transfer = vapor_out * wind / combined_wind_magnitude
+            cloud_transfer = cloud_out * wind / combined_wind_magnitude
             state[neighbor.id]['vapor_content'] += vapor_transfer
             state[neighbor.id]['cloud_content'] += cloud_transfer
 
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out
+
 
 def iterate_climate_simplified(grid, config, prev_state):
     state = new_state(grid)
@@ -993,7 +994,7 @@ def iterate_climate_simplified(grid, config, prev_state):
         state[tile.id]['water_flow'] = 0
 
     # WINDS!
-    distribution_wind_simple_v3(grid, config, state, prev_state)
+    distribution_wind_steadystate_v4(grid, config, state, prev_state)
 
     # for tile in grid.tiles:
     #     state[tile.id]['water_flow'] = state[tile.id]['cloud_content'] * 0.5
