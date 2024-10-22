@@ -1,6 +1,6 @@
 import math
 
-from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio, get_hex_direction_vector, xy_to_qrs, qrs_to_xy, get_tile_qrs, aux_coriolis_velocity_qrs
+from climate.utils import altitude_from_sea_level, normalize_vector, vector_magnitude, normalized_latitude, new_state, is_sea_tile, vector_to_flat_hex_neighbors_and_ratio, get_hex_direction_vector, xy_to_qrs, qrs_to_xy, get_tile_qrs, aux_coriolis_velocity_qrs, aux_coriolis_parameter
 
 # ============ #
 # === WIND === #
@@ -367,7 +367,7 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
     wind_friction_biomass = config['climate']['wind_friction_biomass']
     distance_between_tiles = config['climate']['distance_between_tiles']
     planet_angular_velocity = config['climate']['planet_angular_velocity']
-    pressure_gradient_to_wind_factor = 100
+    pressure_gradient_to_wind_factor = config['climate']['pressure_gradient_to_wind_factor'] # 100 is good
 
     # cumulative wind
     incoming_winds = {}
@@ -460,12 +460,22 @@ def distribution_wind_simple_v3(grid, config, state, prev_state):
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out
 
-# === WIND - v4 - Steady State === #
+# === WIND - v4 === #
 # v4 - calculate winds along q,r,s axes, then convert to x,y
 #   we have some floating-point artifacts still, but in more places now so at least it seems less weird, and they're irrelevant anyway
 #   at the same time, this fixed the coriolis effect issues from v3!
 #
-#   NOTE: this version does not forward winds, assuming a steady state where wind acceleration across tiles is balanced out with wind deceleration from friction
+# We have 2 variants of v4:
+#   - Steady State: we ignore friction for the most part, assuming forces balance out so that wind only depends on local pressure gradient, so that winds are not propagated further
+#           we just reinsert friction as a function of altitude and biomass, to slow down winds a bit over terrain as appropriate
+#   - Propagated: we propagate winds to neighbors, and add a distance-proportional friction to the transferred wind
+#
+# === WIND - v4 - Steady State Variant === #
+# ISSUES
+#   - We could use a more "physical" real-world model to calculate velocity from pressure gradients.
+#        I tried geostrophic wind here again, as in v0, using x,y coordinates - the wind was all fucked by 3-4 orders of magnitude.
+#           Dividing it by 100 to 500 yielded decent velocities, but then there's no curving, as you would expect, so it's not like that's an improvement really.
+#           There is no curving because it assumes coriolis, friction and pressure gradient forces are all balanced, so the winds just run along equal-pressure lines
 def distribution_wind_v4_steadystate(grid, config, state, prev_state):
     # all_wind and distribution joined into one function
     # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
@@ -474,12 +484,7 @@ def distribution_wind_v4_steadystate(grid, config, state, prev_state):
     wind_friction_altitude = config['climate']['wind_friction_altitude']
     wind_friction_biomass = config['climate']['wind_friction_biomass']
     distance_between_tiles = config['climate']['distance_between_tiles']
-    pressure_gradient_to_wind_factor = 100
-
-    # cumulative wind, in qrs
-    # incoming_winds = {}
-    # for tile in grid.tiles:
-    #     incoming_winds[tile.id] = [0, 0, 0]
+    pressure_gradient_to_wind_factor = config['climate']['pressure_gradient_to_wind_factor'] # 100 is good
 
     # queue = every tile on the map, sorted by air pressure (highest first)
     queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'], reverse=True)
@@ -503,7 +508,8 @@ def distribution_wind_v4_steadystate(grid, config, state, prev_state):
             friction = 0.0
             # - however, this is a minor effect at a large scale. But still something I want to include
             # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
-            friction += (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude # we're assuming friction is linearly proportional to mean altitude difference
+            # if altitude goes the opposite way, that doesnt speed up the wind, so ensure there's a minimum of 0 friction contribution here
+            friction += max(0.0, (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude) # we're assuming friction is linearly proportional to mean altitude difference
             # but forests also have an effect, so let's look at biomass on this tile
             friction += (state[tile.id]['biomass'] + state[neighbor.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
             # and we apply the friction
@@ -516,19 +522,11 @@ def distribution_wind_v4_steadystate(grid, config, state, prev_state):
             direction_vector_qrs = xy_to_qrs(wrapped_direction_vector[0], wrapped_direction_vector[1])
             wind_vector = [wind * component for component in direction_vector_qrs]
 
-            # add incoming wind
-            # for i, change in enumerate(incoming_wind):
-            #     wind_vector[i] += change
-
             # coriolis effect
             coriolis_vector = aux_coriolis_velocity_qrs(config, normalized_latitude(tile), wind_vector)
             wind_vector[0] += coriolis_vector[0]
             wind_vector[1] += coriolis_vector[1]
             wind_vector[2] += coriolis_vector[2]
-
-            # incoming_winds[neighbor.id][0] += wind_vector[0]
-            # incoming_winds[neighbor.id][1] += wind_vector[1]
-            # incoming_winds[neighbor.id][2] += wind_vector[2]
             
             neighbors_winds.append((neighbor, wind_vector))
 
@@ -563,3 +561,233 @@ def distribution_wind_v4_steadystate(grid, config, state, prev_state):
 
         state[tile.id]['vapor_content'] -= vapor_out
         state[tile.id]['cloud_content'] -= cloud_out
+
+# === WIND - v4 - Propagated Variant === #
+# ISSUES
+#   - Friction needs to be carefully balanced, as it can easily lead to winds dying out instantly or exploding.
+#       - And then if it's reasonably balanced, it just feels like the same as Steady State but with extra work.
+def distribution_wind_v4_propagated(grid, config, state, prev_state):
+    # all_wind and distribution joined into one function
+    # we no longer compute a combined pressure gradient, instead we transfer vapor and clouds to every neighbour downwind
+    # this is because vapor on the map was being spread along straight lines because of winds, and so creating a very unsmooth map for humidity
+    # additionally, we propagate wind itself, so they dont die off too quickly upon hitting a landmass or stable pressure area
+    wind_friction_altitude = config['climate']['wind_friction_altitude']
+    wind_friction_biomass = config['climate']['wind_friction_biomass']
+    # between roughly 7.5e-5 and 10e-5 for a distance between tiles of 10000
+    wind_friction_distance = config['climate']['wind_friction_distance']
+    distance_between_tiles = config['climate']['distance_between_tiles']
+    pressure_gradient_to_wind_factor = config['climate']['pressure_gradient_to_wind_factor']
+
+    # cumulative wind, in qrs
+    incoming_winds = {}
+    for tile in grid.tiles:
+        incoming_winds[tile.id] = [0, 0, 0]
+
+    # queue = every tile on the map, sorted by air pressure (highest first)
+    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'], reverse=True)
+    while queue:
+        tile = queue.pop(0)
+        sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
+        
+        neighbors_winds = []
+        for neighbor in tile.get_neighbors():
+            neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
+            
+            # if the neighbor has same or higher air pressure, it's not downwind
+            if neighbor_pressure >= sea_level_air_pressure:
+                continue
+
+            pressure_gradient_1d = (sea_level_air_pressure - neighbor_pressure) / distance_between_tiles
+
+            wind = pressure_gradient_1d * pressure_gradient_to_wind_factor
+
+            # winds are slowed down by friction
+            # first there is a base component, from drag and generic friction, 
+            friction = 0
+            # - however, this is a minor effect at a large scale. But still something I want to include
+            # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
+            # if altitude goes the opposite way, that doesnt speed up the wind, so ensure there's a minimum of 0 friction contribution here
+            friction += max(0.0, (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude) # we're assuming friction is linearly proportional to mean altitude difference
+            # but forests also have an effect, so let's look at biomass on this tile
+            friction += (state[tile.id]['biomass'] + state[neighbor.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
+            # and we apply the friction
+            friction = min(1.0, friction)
+
+            wind *= (1.0 - friction)
+
+            # calculate basic wind vector
+            wrapped_direction_vector = get_hex_direction_vector(tile, neighbor)
+            direction_vector_qrs = xy_to_qrs(wrapped_direction_vector[0], wrapped_direction_vector[1])
+            wind_vector = [wind * component for component in direction_vector_qrs]
+
+            # add incoming wind - we dont account for friction here because it was already accounted for in the source tile
+            for i, change in enumerate(incoming_winds[tile.id]):
+                wind_vector[i] += change
+
+            # coriolis effect
+            coriolis_vector = aux_coriolis_velocity_qrs(config, normalized_latitude(tile), wind_vector)
+            wind_vector[0] += coriolis_vector[0]
+            wind_vector[1] += coriolis_vector[1]
+            wind_vector[2] += coriolis_vector[2]
+
+            # add distance friction to the PROPAGATED wind only
+            incoming_winds[neighbor.id][0] += wind_vector[0] * max(0, 1 - wind_friction_distance * distance_between_tiles)
+            incoming_winds[neighbor.id][1] += wind_vector[1] * max(0, 1 - wind_friction_distance * distance_between_tiles)
+            incoming_winds[neighbor.id][2] += wind_vector[2] * max(0, 1 - wind_friction_distance * distance_between_tiles)
+            
+            neighbors_winds.append((neighbor, wind_vector))
+
+        # x,y wind vector calculation for display on the map
+        combined_wind_vector = [0, 0]
+        # magnitude to determine distribution
+        combined_wind_magnitude = 0
+        for neighbor, wind_vector in neighbors_winds:
+            added_vector = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            combined_wind_vector[0] += added_vector[0]
+            combined_wind_vector[1] += added_vector[1]
+            combined_wind_magnitude += vector_magnitude(added_vector[0], added_vector[1])
+        state[tile.id]['wind'] = combined_wind_vector
+
+        if combined_wind_magnitude == 0:
+            continue
+
+        # calculate how much of each variable to transfer out
+        vapor_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_vapor_transfer_speed'])
+        vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
+        cloud_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_cloud_transfer_speed'])
+        cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
+
+        for neighbor, wind_vector in neighbors_winds:
+            xy_buffer = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            wind = vector_magnitude(xy_buffer[0], xy_buffer[1])
+            # calculate how much to transfer to this one neighbor
+            vapor_transfer = vapor_out * wind / combined_wind_magnitude
+            cloud_transfer = cloud_out * wind / combined_wind_magnitude
+            state[neighbor.id]['vapor_content'] += vapor_transfer
+            state[neighbor.id]['cloud_content'] += cloud_transfer
+
+        state[tile.id]['vapor_content'] -= vapor_out
+        state[tile.id]['cloud_content'] -= cloud_out
+
+
+# === WIND - v5 - Steady State === #
+# Same as v4, but instead of using an arbitrary constant to scale winds, we use maths
+#    |PGF acceleration a| = 1 / density * delta-P / d
+# Integrating over time: ( and with v0 = 0 )
+#    v = v0 + a * t        
+#    d = v0 * t + 1 / 2 * a * t^2
+# -> v = a * t
+#    t = sqrt(2 * d / a)
+# -> v = a * sqrt(2 * d / a) = sqrt(2 * d) * a / sqrt(a) = sqrt(2 * d * a)
+# -> v = sqrt(2 * d / density * delta-P / d) = sqrt(2 * delta-P / density)
+#
+# ISSUES
+#   - It no longer depends on distance, meaning it depends purely on the pressure difference.
+#       That means that map scale will definitely affect wind speed, as pressure is discretized differently.
+#           This would be happening in v4 too, but distance might offset it there to some degree.
+#       This is significant, but just a natural consequence of a discretized model of the real world.
+#   Basically, the heart of the issue can be explained thus:
+#       - As map resolution increases, the pressure difference between two adjacent tiles will decrease, and so will the wind speed.
+#           As a limit, at infinite resolution, we will have no wind.
+#           * This point requires a solution.
+#      - As map resolution decreases, depending on discretization, we risk getting both too much wind and too little wind.
+#           * This point just is what it is, that's what happens at low resolutions.
+#           -> We just need to generate worlds with a good resolution.
+#   POSSIBLE SOLUTIONS FOR POINT 1:
+#       - Maybe propagated wind actually solves that? Since friction depends on distance, and otherwise the winds are added up.
+#           - Could write a wind_v5_propagated, so propagating winds and calculating wind as sqrt(2*dP/rho).
+#           - But we probably have to fiddle around with the distance friction constant anyway, and this doesn't address resolution directly, it just does if we assume that distance between tiles and resolution are related. So we're assuming a world of fixed size, to expect the same wind speed at different resolutions.
+#       - v4 steadystate (or propagated, for that matter), since its speed depends on adjustable constants, solves it by forcing us to adjust the wind speed manually.
+#           - But the whole point of v5 is to avoid manual tuning...
+#       - If sticking to v5 steadystate: could still add a wind multiplier that is either calculated off of resolution automatically, or based on a config constant, or a combination of the 2.
+#           - Basically, v5 being v4 steadystate but with less manual tuning and more based on physical constants, would be the goal there.
+#           - Or possibly adding in distance-based friction for the local winds too?
+#               Would that do anything? That doesn't address the resolution issue on its own.
+#       PREFERRED SOLUTION, if we want to go this way:
+#       - v6 steadystate, wind multiplier that is based on grid dimensions (i.e. resolution) and a secondary config constant.
+#           standard reference should probably be a 100x100 grid, or possibly 50x50
+#           scale with sqrt(grid size / reference grid size) * config wind scale constant
+#           question: scale differently along the 2 axes depending on the width and height (if they're different), or take the largest of the 2 and scale along with that one, or what?
+#   NOTE: The REAL preferred solution for this is to adjust the pressure map to be more accurate.
+def distribution_wind_v5_steadystate(grid, config, state, prev_state):
+    wind_friction_altitude = config['climate']['wind_friction_altitude']
+    wind_friction_biomass = config['climate']['wind_friction_biomass']
+
+    # queue = every tile on the map, sorted by air pressure (highest first)
+    queue = sorted(grid.tiles, key=lambda tile: state[tile.id]['sea_level_air_pressure'], reverse=True)
+    while queue:
+        tile = queue.pop(0)
+        sea_level_air_pressure = state[tile.id]['sea_level_air_pressure']
+        
+        neighbors_winds = []
+        for neighbor in tile.get_neighbors():
+            neighbor_pressure = state[neighbor.id]['sea_level_air_pressure']
+            
+            # if the neighbor has same or higher air pressure, it's not downwind
+            if neighbor_pressure >= sea_level_air_pressure:
+                continue
+
+            wind = math.sqrt(2 * (sea_level_air_pressure - neighbor_pressure) / 1.225) / 10
+
+            # winds are slowed down by friction
+            friction = 0.0
+            # - however, this is a minor effect at a large scale. But still something I want to include
+            # most of this will be due to mountainous terrain - so we look at differences in altitude between this tile and its neighbors
+            # if altitude goes the opposite way, that doesnt speed up the wind, so ensure there's a minimum of 0 friction contribution here
+            friction += max(0.0, (altitude_from_sea_level(config, neighbor.altitude) - altitude_from_sea_level(config, tile.altitude)) * wind_friction_altitude) # we're assuming friction is linearly proportional to mean altitude difference
+            # but forests also have an effect, so let's look at biomass on this tile
+            friction += (state[tile.id]['biomass'] + state[neighbor.id]['biomass'])/2 * wind_friction_biomass # assume every 10 kg of biomass per surface area in either tile adds 0.005 friction
+            # and we apply the friction
+            friction = min(1.0, friction)
+
+            wind *= (1.0 - friction)
+
+            # calculate basic wind vector
+            wrapped_direction_vector = get_hex_direction_vector(tile, neighbor)
+            direction_vector_qrs = xy_to_qrs(wrapped_direction_vector[0], wrapped_direction_vector[1])
+            wind_vector = [wind * component for component in direction_vector_qrs]
+
+            # coriolis effect
+            coriolis_vector = aux_coriolis_velocity_qrs(config, normalized_latitude(tile), wind_vector)
+            wind_vector[0] += coriolis_vector[0]
+            wind_vector[1] += coriolis_vector[1]
+            wind_vector[2] += coriolis_vector[2]
+            
+            neighbors_winds.append((neighbor, wind_vector))
+
+        # x,y wind vector calculation for display on the map
+        combined_wind_vector = [0, 0]
+        # magnitude to determine distribution
+        combined_wind_magnitude = 0
+        for neighbor, wind_vector in neighbors_winds:
+            added_vector = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            combined_wind_vector[0] += added_vector[0]
+            combined_wind_vector[1] += added_vector[1]
+            combined_wind_magnitude += vector_magnitude(added_vector[0], added_vector[1])
+        state[tile.id]['wind'] = combined_wind_vector
+
+        if combined_wind_magnitude == 0:
+            continue
+
+        # calculate how much of each variable to transfer out
+        vapor_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_vapor_transfer_speed'])
+        vapor_out = state[tile.id]['vapor_content'] * vapor_wind_ratio * config['climate']['winds_max_vapor_transfer_ratio']
+        cloud_wind_ratio = min(1.0, combined_wind_magnitude / config['climate']['winds_max_cloud_transfer_speed'])
+        cloud_out = state[tile.id]['cloud_content'] * cloud_wind_ratio * config['climate']['winds_max_cloud_transfer_ratio']
+
+        for neighbor, wind_vector in neighbors_winds:
+            xy_buffer = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
+            wind = vector_magnitude(xy_buffer[0], xy_buffer[1])
+            # calculate how much to transfer to this one neighbor
+            vapor_transfer = vapor_out * wind / combined_wind_magnitude
+            cloud_transfer = cloud_out * wind / combined_wind_magnitude
+            state[neighbor.id]['vapor_content'] += vapor_transfer
+            state[neighbor.id]['cloud_content'] += cloud_transfer
+
+        state[tile.id]['vapor_content'] -= vapor_out
+        state[tile.id]['cloud_content'] -= cloud_out
+
+
+# === DEFAULT === #
+# for simplifying exports - use latest highest quality model
+default_wind = distribution_wind_v5_steadystate

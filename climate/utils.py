@@ -1,6 +1,10 @@
 import math
 
 # === UTILS ===
+# avg distance between all points in a hexagon to all points in a neighboring hexagon, approximately (determined via monte carlo)
+def avg_distance_all_to_all(center_to_center):
+    return center_to_center * 1.072
+
 def vector_magnitude(x, y):
     return math.sqrt(x * x + y * y)
 
@@ -44,6 +48,10 @@ def get_tile_qrs(grid, q, r, s):
     x, y = qrs_to_xy(q, r, s)
     return grid.get_tile(x, y)
 
+def aux_coriolis_parameter(config, normalized_latitude):
+    planet_angular_velocity = config['climate']['planet_angular_velocity']
+    return 2 * planet_angular_velocity * math.sin(normalized_latitude * math.pi / 2)
+
 def aux_coriolis_velocity_qrs(config, normalized_latitude, wind_vector):
     planet_angular_velocity = config['climate']['planet_angular_velocity']
     distance_between_tiles = config['climate']['distance_between_tiles']
@@ -52,7 +60,7 @@ def aux_coriolis_velocity_qrs(config, normalized_latitude, wind_vector):
         return [0, 0, 0]
 
     # apply coriolis effect to the outgoing wind stream (the neighbor's incoming)
-    coriolis_parameter = 2 * planet_angular_velocity * math.sin(normalized_latitude * math.pi / 2)
+    coriolis_parameter = aux_coriolis_parameter(config, normalized_latitude)
     xy_buffer = qrs_to_xy(wind_vector[0], wind_vector[1], wind_vector[2])
     direction_vector = normalize_vector(xy_buffer[0], xy_buffer[1])
     # coriolis direction is perpendicular to the wind direction
