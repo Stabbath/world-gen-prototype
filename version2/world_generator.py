@@ -1,19 +1,33 @@
 from enum import Enum
 
 # TODO - RESEARCH:
-# - https://github.com/Sean-Hastings/Terrain-Generation
-# - https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation
-# - https://github.com/seanth/PyTectonics
-# - https://github.com/marchamann/Tectonic-Map-Generator/blob/master/technical.md
 # - ChatGPT's deep research output on this topic
 
 class WorldSurfacePoint:
+    x: float
+    y: float
+
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+
+class WorldSurfacePointDiscrete:
     x: int
     y: int
 
     def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
+
+class WorldPoint:
+    x: float
+    y: float
+    z: float
+
+    def __init__(self, x: float, y: float, z: float):
+        self.x = x
+        self.y = y
+        self.z = z
 
 class WorldShape(Enum):
     FLAT = 0,
@@ -84,42 +98,6 @@ class WorldGenerationConfig:
     climate_iterations: int = 100
         
 
-# The parent class for all tectonic strategies
-class TectonicStrategy:
-    pass
-    # options:
-    # - version1 generators
-    # - fractal partitions/noise? Perlin noise or diamond-square
-    # - define a random velocity on a mesh, cluster cells by similar vectors, and then iterate to refine plates
-    # - one or more of the methods
-    # - postprocessing: merging plates, different rules for doing so
-    # - generate a "heat" value for N random points (for N plates), interpolate heat values to the rest of the map, and then use heat to determine boundaries
-    #   - can interpolate for example by having each point have a "heat-effect" on every tile in the world, decreasing with distance
-    #     and then averaging the "heat-effect" of all source points for each other point
-    #   - once we have the full heat map, we find gradient inversions and use them as boundaries
-    #
-    # RESEARCH:
-    # https://github.com/JavierCenteno/TectonicTiles.js - this guy assigns "start" and "end" tiles for each plate to define their movement, and then applies a crease function to every tile which takes into account all of the plate movements, I guess based on its distance to the start and end tiles. Or something like that.
-    # https://github.com/jordanstudioroot/RootGen-UnityCSharp - this guy doesnt have real tectonics, just regions which are randomly assigned elevations
-    # https://github.com/davidson16807/tectonics.js - bullshit name, actually nothing even remotely resembling tectonics
-    #                                                 CORRECTION: check climate research to see how they infer tectonics from the height map and other data
-    # https://github.com/Mindwerks/plate-tectonics - looks really good.
-    #   - has a "lithosphere" object
-    #     - stores params like num of iterations, "folding ratio", sea level, dimensions, erosion period, ...
-    #     - also stores the "plates" objects and transforms them, handles their collisions, etc
-    #   - lithosphere.createPlates or something
-    #     - selects random points as plate centers
-    #     - creates a plateArea which includes the plate's borders, top bottom left and right boundaries, and dimensions
-    #     - grows plates out from their center
-    #   - lithosphere tracks the height of each point and which plate each point belongs to
-    #   - lithosphere resolves collisions by adjusting the crust. Handles both continental and oceanic collisions
-    #     - simulates geological folding
-    #       - takes the folding ratio to see how much of the top crust will be folded on top, adds that much elevation. I guess based on crust thickness too
-    #     - simulates subduction of oceanic crust under continental
-    #       - reduces crust thickness at that point (they just reference the height map, but I guess that's the concept)
-    #     - generates new crust at divergent boundaries
-    #   - periodically applies erosion every N iterations, smoothing
-    #   - cleans up plates if they become empty
 
 class ElevationStrategy:
     pass
@@ -147,6 +125,7 @@ class ElevationStrategy:
     #     - this is one of the options for what I've talked about before with using the statistical distribution of elevations
     # https://github.com/ftomassetti/procedurality-lands - mostly just random noise, but one of the many random noise sides of it intends to simulate an ice age...
     #     - nothing of value to take from it, but the word 'ice age' is interesting, in that we should maybe look into actually simulating ice ages (although that would ideally already be a natural part of an ideal world simulation)
+    # https://github.com/seanth/PyTectonics - see tectonics research entry
 
 class ClimateStrategy:
     pass
@@ -206,16 +185,18 @@ class WorldGenerator:
     world: World
     tectonic_strategy: TectonicStrategy
 
-    def __init__(self, gen_config: WorldGenerationConfig):
+    def __init__(self, gen_config: WorldGenerationConfig, tectonic_strategy: TectonicStrategy):
         self.gen_config = gen_config
+        self.tectonic_strategy = tectonic_strategy
         self.world = World(gen_config.world_init)
     
     def generate(self):
-        self.generate_tectonics()
-        self.generate_height_map()
+        if (self.tectonic_strategy):
+            self.generate_tectonics() # tectonics are probably optional? we mostly only care about them for elevation and potentially volcanic activity, earthquakes etc. Potentially ocean currents may also be influenced by tectonics
+        self.generate_elevation()
         self.generate_seas()
         self.generate_atmosphere()
-        self.generate_base_climate()
+        self.generate_climate_base()
         for i in range(self.gen_config.climate_iterations):
           self.iterate_climate()
 
@@ -223,7 +204,7 @@ class WorldGenerator:
     def generate_tectonics(self):
         pass
 
-    def generate_height_map(self):
+    def generate_elevation(self):
         pass
     
     def generate_seas(self):
@@ -232,7 +213,7 @@ class WorldGenerator:
     def generate_atmosphere(self):
         pass
 
-    def generate_base_climate(self):
+    def generate_climate_base(self):
         pass
     
     def iterate_climate(self):
