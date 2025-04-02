@@ -1,6 +1,6 @@
 # MAJOR TODOS 
-- Review the DeepResearch prompt I gave ChatGPT to find more info on this specific topic. Fill in the details here.
-- Compile all of my notes in the .py files' comments into this document. Store the notes on other peoples' implementations in an annex.
+- [ ] Review the DeepResearch prompt I gave ChatGPT to find more info on this specific topic. Fill in the details here.
+- [ ] Compile all of my notes in the .py files' comments into this document. Store the notes on other peoples' implementations in an annex.
 
 # Great References:
 - Tectonic Generation (but decent, there's a lot of crap ones out there)
