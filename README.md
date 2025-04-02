@@ -10,7 +10,7 @@ There are a few different ways to represent the surface, which is a key requirem
 
 We can look at the surface as a grid of some sort, or discretize it into points. Height-map-based methods (where we calculate heights directly onto a static location on the surface) would tend to work better with a grid; truer tectonic simulations with movement of surfaces would tend to work better with surface points.
 
-For Spheres, there is an easily-found (or LLM-able) method to distribute points evenly across a sphere: look-up Fibonacci Spheres. There are other solutions, that one is pretty popular and looks pretty good.
+For Spheres, there is an easily-found (or LLM-able) method to distribute points evenly across a sphere: look-up **Fibonacci Spheres**. There are other solutions, that one is pretty popular and looks pretty good.
 For flat and cyllindrical worlds, we don't need to worry about that. For a flat world it's pretty obvious, and for a cyllindrical world, consider that it's just a flat world that was curved inwards until 2 of its opposing edges connected to each other.
 
 # Modelling 1: Plate and Boundary Geometries
