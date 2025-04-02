@@ -5,10 +5,10 @@ We want to model this in a hyper-realistic but comfortably-abstracted way. Our g
 
 **Abstraction 1:** We ignore everything below the lithosphere. We can just simulate the effects the asthenosphere has on it abstractly, and we don't even need to think about anything lower than that.
 
-At some point I considered modeling the crust as discretized spheres and writing a custom soft-body physics engine to simulate it fully. Then I remembered I'm not actually a geophysicist and I'm not getting paid to do this.
+At some point I considered modelling the crust as discretized spheres and writing a custom soft-body physics engine to simulate it fully. Then I remembered I'm not actually a geophysicist and I'm not getting paid to do this.
 
-# Modeling 1: Plate and Boundary Geometries
-## Modeling 1.1: Initial Generation
+# Modelling 1: Plate and Boundary Geometries
+## 1.1: Initial Generation
 There are 2 options: 
 1. You define plates and then the boundaries are the edges of those plates; or
 2. You define boundaries, and then the plates are the space between those boundaries.
@@ -27,12 +27,24 @@ But in that same prototype we also experimented with boundary-first generation, 
 	- This has basically no cost, and makes a lot of possible calculations later a lot easier.
 - We should perhaps take care that no junctions above degree 3 exist, as only 4 is possible and those collapse very quickly down into a 3.
 
-## Modeling 1.2: Plate Rift Dynamics
+## 1.2: Plate & Boundary Dynamics
+### Rifting
 As we will see later, the moving plates can get subducted, pushed back into the earth and destroyed, which would mean that over time plates would continuously be destroyed with some "stronger plate" or perfectly balanced set of plates eventually taking up the entire world. This is obviously not what happens on geologically-active planets. For example, on Earth, we can see something interesting happening currently: there is a rift forming between the Horn of Africa and the rest of the mainland, which in the future will eventually break it off into its own separate plate and begin pushing the African continent and the Horn of Africa away from each other, as a new divergent boundary and future rift. This is also what happened to push South America away from Africa, which has turned into what now is the mid-atlantic ridge.
 
-So, we need to periodically and dynamically create new rifts to break apart large plates. Each time we do so, we will have to recalculate Euler poles and/or rotational velocity, probably in a way that preserves momentum for the 2 new sub-plates breaking apart from the original. That might be what explains the "instant" and drastic change in direction that one can observe in the volcanic chains of pacific islands, like Hawaii. **TODO Question** - I haven't seen that explained that way anywhere, but it seems like a likely physical grounding for that sort of event.
+So, we need to periodically and dynamically create new rifts to break apart large plates, creating a new triple junction at some location. Each time we do so, we will have to recalculate Euler poles and/or rotational velocity, probably in a way that preserves momentum for the 2 new sub-plates breaking apart from the original. That might be what explains the "instant" and drastic change in direction that one can observe in the volcanic chains of pacific islands, like Hawaii. **TODO Question** - I haven't seen that explained that way anywhere, but it seems like a likely physical grounding for that sort of event.
 
-# Modeling 2: Tectonic Motion
+**TODO Question:** We may want to consider some kind of non-boundary boundary, a transitional boundary of sorts, to represent e.g. the current situation in East Africa. It's still one plate, but there is already a very visible topological rift.
+
+**TODO citation needed & Question:** Rifts may sometimes form through highly active hot spots. Could that be what caused the east african one? As there are some hot spots in that area. Which one came first?
+
+### Suture
+**TODO Citation Needed:** Also when an oceanic plate is getting subducted, it may drag along continental crust (or sufficiently light or stacked-up crust in any case that may resist being pulled down) and crash it onto a continental plate. This may cause subduction to stop (I guess if there's too much resistance, or once the entire oceanic plate has been subducted) and lead to what's left of the previously-subducted plate to merge onto the other, becoming one plate.
+
+We'll need to adjust movement, probably as a weighted average of the 2 plates?
+
+
+
+# Modelling 2: Tectonic Motion
 
 ## 2.1: Isolated Motion
 The simplest and most accurate method I managed to find after a lot of research and reflection: we ignore the specific forces at play, and instead focus on the movement itself. 
@@ -60,8 +72,6 @@ As the plates move, they will diverge from or converge at their boundaries, as w
 - New material must be produced where they diverge, as new crust is produced from the uprising mantle and what have you. 
 - Where they converge, crust must be transformed and destroyed. Or in some cases also created, through volcanism.
 
-In general, we may want to keep con
-
 ### 2.2.1 Divergence
 Very simple: after every time step, we must fill all space around each divergent boundary that has become empty as space opens up between the plates. These new points get added onto to the plate on the appropriate side.
 
@@ -75,7 +85,11 @@ Where 2 plates converge, things happen. Firstly, in all but 1 case, there is sub
 - **Oceanic-continental:** the oceanic plate gets subducted underneath the continental plate. This causes uplift of the continental crust, causing mountain chains as well, but I think typically smaller than continental-continental (e.g. Andes).
   - Additionally, there's a bit of a magmatic mess going down with the melting of the subducted plate, which leads to volcanism and the creation of new continental crust, in addition to the uplift.
 
-# Modeling 3: Hot Spots
+Another consideration is that at the subduction boundary, a deep trench always forms.
+
+
+
+# Modelling 3: Hot Spots
 Hot Spots are places on the earth's crust where magma seeps upwards, disconnected from any boundary line. They are considered to have a constant position, unlike boundaries which often move with the plates. As they periodically emit matter through volcanism, they form mountains. As the plates move through and away, this causes island chains (e.g. Hawaii). If there's enough mass to reach sea level, it's what's called a "seamount". These islands are really a series of volcanoes with varying levels of activity: as a volcano gets pushed away from the hot spot, its activity decreases until it becomes extinct.
 
 They are mostly centered on and around divergent boundaries (although it can still be quite distant), and *never* appear on top of subductive boundaries (the main type of convergence).
@@ -83,25 +97,62 @@ They are mostly centered on and around divergent boundaries (although it can sti
 
 There are estimated to be about 40-50 active hot spots on Earth.
 
-# Modeling 4: Crust Creation & Mineral Resources
+# Modelling 4: Crust Creation & Mineral Resources
 As already mentioned, crust gets remixed and created at all bondaries except continental-continental convergent, as well as at hot spots.
 
 There are a couple of open questions in this area:
 1. Should we worry about keeping crust creating equal to crust destruction (at subduction areas)? Will that be relevant?
 2. How do we represent different types of crust and rock? Is just a single monolithic "crust" enough? Do we just go with continental and oceanic? An arbitrary array? Or do we even go more specific and look at different types of rocks, in greater detail than just "oceanic" and "continental"?
 
+One particular cool use of greater detail here, is that different minerals (like gold, iron ore, diamonds, etc) are more likely to form in different environments; so this could give us a blueprint for realistic resource distribution.
+
 So below follow a number of explorations of these concerns...
 
-## Continental, Oceanic, or Both?
+## 4.1 Continental, Oceanic, or Both?
 **TODO Question:** Plates can have both oceanic AND continental crust. Should we model this? And how? As a percentage, as 2 (or more) layers of a single plate, or some other way?
 
 For reference, Earth's crust is about 30% continental.
 
-## Mineral Resources & Rock Types
-- Hotspot Volcanism: generates **Basalt**
+## 4.2 Rock Types
+Oceanic Crust is generally **basaltic**. It's less dense and the crust is thinner (5-10 km).
+Continental Crust is generally **granitic**. It's denser and the crust is thicker (30-70km), and lives longer since it doesn't get subducted.
+- Can also be **felsic**.
+
+More specifically:
+- Divergent zones create mostly *oceanic* **basaltic** material.
+- **TODO - confirm:** Hotspot volcanism also creates *oceanic* **basaltic** material.
+  - I think hotspot volcanism on continental mass actually creates continental or intermediate crust, not sure.
+- Subduction-related volcanism creates *intermediate* **andesitic** material.
+  - It "becomes" continental upon collision with a continental plate? I guess you can create continents even by just accreting andesitic materials.
+  - Also through continued arc volcanism, it can directly be remixed into a more continental rock type.
+  - **TODO - confirm** - is andesitic material refined into more granitic composition e.g. at continental-continental convergence? Plus through sediment recycling.
+
+Rock types:
+- Basalt is **mafic**.
+- Andesite (and Dacite/Rhyolite) are **intermediate to felsic**.
+- Granite is **felsic**.
+
+**TODO - question:** I guess generally there's just still a lot to understand here, for me.
+
+## 4.3 Mineral Resources
+- **Gold and other ores:** Convergent boundaries and orogenic belts are prime zones. Areas that have undergone subduction-related magmatism or continental collision are likely to have rich mineralization.
+- **Diamond:** Diamonds are linked to ancient, stable continental interiors ("cratons") with very thick lithosphere. Any continental crust that has remained intact and un-subducted for a long span can be treated as a craton. We expect diamond resources to be found in such regions.
+
+### MAJOR TODO - Review the DeepResearch prompt I gave ChatGPT to find more info on this specific topic. Fill in the details here.
 
 
+# Modelling 5: Erosion
+Simplest form is just applying a bit of a smoothing function to everything at every time step.
 
+# Modelling X: Bringing it All Together
+I guess 2 options:
+- Mathematical Modelling: we consider a static world, with lines for *current* boundaries, plates, and hot spots. We assign properties as normal. Instead of simulating movement and interaction, we implement mathematical formulae for the effect that each boundary has on the elevation of each point on the globe, with age being a major factor (and distance and other properties being related with age). For each point, we add up all of its effects to find its elevation. We add some random noise functions here and there as well as smoothing (also age-dependent). We hope it looks good at the end.
+- Real Simulation: we simulate actual movement and interactions.
+
+It's not clear to me which one would be easier in reality, even though the mathematical path *feels* easier. I think real simulation is the way to go.
+
+**TODO - ponder? idk:** Oh! There's a third option: Mixed Modelling. We don't discretize the crust or whatever as points on a sphere, we stick to geometrical definitions of 1d and 2d objects (on a spherical surface); we simulate the movements of these geometries with each timestep, applying appropriate functions to each point, instead of moving the points. With each timestep, we calculate the effects on the heightmap of each geometric structure. We can dynamically destroy and create new plates etc just as we discussed, but keeping it strictly algebraic.
+- Wait, does that work? For example, think about hotspot island chains. If they don't move, and we don't make plates move, that wouldn't work. Unless we add elevation at each timestep onto a specific coordinate offset from some static reference for the plate that the point is inside of... at that point, is it worth it to keep things algebraic? My brain hurts.
 
 
 # Further Refinement, Random Brainstorming, and notes that need to be organised
@@ -149,16 +200,29 @@ IDEA: probably it would be best to create boundaries and plates one by one, care
 	An addendum to this though, which is also a reference to the 2-plate simulations I've seen in a few places to demonstrate euler rotation and divergent and subductive boundaries... the Earth is supposedly broken into 2 major convective cells, which create 2 major subductive zones and 2 major divergent zones. That seems incompatible. Is that just due to the lack of realism of a 2-plate system? Meaning that in a realistic system you would never have such few plates, so this would never happen.
 
 
-SOME THINGS TO THINK ABOUT:
-- Formally define each of the possible geological features? Might be useful. Can probably checks GPlates for their definitions
-- Should we track rock types more specifically than just continental and oceanic crust? Given the thing about Andesite. Could be interesting as well if it then can help us determine where e.g. gold or diamond deposits might be more likely.
+# Annex: Geological Features, A Quick Summary
+- **Mid-Ocean Ridges:** Continuous submarine mountain chains at divergent boundaries. These form where plates spread apart and magma rises to create new crust.
+- **Oceanic Trenches:** Deep troughs in the ocean where subduction is occurring. At convergent boundaries, the downgoing plate bends downward, forming a trench that can be several kilometers deeper than the surrounding seafloor.
+- **Volcanic Island Arcs:** Curving chains of volcanic islands that arise from ocean-ocean subduction. As one oceanic plate subducts beneath another, volcanoes build up from the seafloor on the overriding plate. Over millions of years, these volcanoes grow into islands that form an arc shape roughly parallel to the trench.
+- **Continental Volcanic Arcs:** Similar to island arcs, but occurring on the edge of a continent when an oceanic plate subducts beneath continental crust, just inland from the trench. These volcanoes, which are stratovolcanoes in nature, produce andesitic to rhyolitic lava and build mountains (e.g. Andes).
+- **Non-volcanic Mountain Ranges (Orogenic Belts):** Where continents collide or compress, extensive mountain ranges form.
+- **Plateaus and Foothills:** As a byproduct of orogeny, broad plateaus can develop (e.g. Tibet). Uplift zones can also occur away from collisions – for instance, a plume head could uplift a dome, or a region with extensive intrusions might isostatically rise.
+- **Transform Fault Valleys:** While transform faults don’t create large vertical relief, the intense shear can produce a narrow depression or a series of sag ponds in continental settings​, and a noticeable geological formation (see San Andreas Fault).
+  - In the ocean, we see fracture zones even beyond each transform boundary, extending its line in both directions beyond its ends, producing a similar feature.
+
+Visually connecting them: 
+- Mid-ocean ridges have the ridge effect going on, descending into abyssal plains, which later rise back up onto the continental shelf.
+- Oceanic trenches cause volcanic island arcs in oceanic-oceanic convergences, or continental volcanic arcs inland in oceanic-continental.
+- Continental-continental convergence causes orogenic belts closest to the boundary, followed by foothills and plateaus.
+- Transform faults produce specifically transform-fault valleys.
+
+**TODO:** I'm not sure if this is a complete list, check the GPlates api, they had good definitions for features.
 
 
-# Annex (for now): crust and rock types and geological resources
+# Annex: Future development
+Meteor strikes - craters, atmospheric burn, exotic minerals, etc
 
-Oceanic Crust is created in divergent zones.
-Oceanic Crust is also created at hot spots.
-Continental Crust is created through arc volcanism at subduction zones.
-Continental Crust is also pushed up at continental-oceanic subduction zones.
-
-
+Hypothetical complex conditions for additional types of crust/rock formation? Given:
+- Different mantle compositions in distinct regions.
+- Multiple crust-forming processes (e.g. extensive volcanism, plate tectonics, large impacts, or chemical layering).
+- Exotic surface chemistry (e.g. ice crusts, sulfur plains, or metal-rich layers on different parts of the surface).
