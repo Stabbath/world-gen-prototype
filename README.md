@@ -142,7 +142,7 @@ Rock types:
 
 
 # Modelling 5: Erosion
-Simplest form is just applying a bit of a smoothing function to everything at every time step.
+Simplest form is just applying a bit of a smoothing function to everything at every time step. But as we want to have a climate system later, it may be better and equally realistic-looking to do no erosion until we have a climate system, and then do a lot of erosion-only steps or otherwise intensify erosion in the normal climate iterations. Conceptually I like the separation of still having just an erosion-only loop to finalize the base elevation map before we handle the rest. Or incorporating some generic heuristic-based erosion in the tectonic model itself, before we ever get around to looking at water etc.
 
 # Modelling X: Bringing it All Together
 I guess 2 options:
