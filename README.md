@@ -1,11 +1,9 @@
 # The Basics
 The surface of the world is made up of contiguous rigid plates that move against each other - the lithosphere -, pushed by convection currents in the underlying fluid asthenosphere, as well as slab-pull (if part of the plate is being pushed down, the rest gets dragged along) and ridge-push (wherever 2 plates move apart, there is material coming to the top and cooling down and becoming part of the slabs, and it pushes the rest of the slab away) forces.
 
-We want to model this in a hyper-realistic but comfortably-abstracted way. Our goal isn't to create a complex soft-body simulation of a planet's entire mass. It's to get pretty realistic planets with realistic geological information.
+We want to model this in a hyper-realistic but comfortably-abstracted way. Our goal isn't to create a complex soft-body simulation of a planet's entire mass. It's to get pretty realistic planets with realistic geological information. I actually considered the former for a moment, thinking about writing a custom soft-body physics engine, but then I remembered I'm not actually a geophysicist and I'm not getting paid to do this.
 
 **Abstraction 1:** We ignore everything below the lithosphere. We can just simulate the effects the asthenosphere has on it abstractly, and we don't even need to think about anything lower than that.
-
-At some point I considered modelling the crust as discretized spheres and writing a custom soft-body physics engine to simulate it fully. Then I remembered I'm not actually a geophysicist and I'm not getting paid to do this.
 
 # Modelling 1: Plate and Boundary Geometries
 ## 1.1: Initial Generation
