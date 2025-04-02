@@ -5,6 +5,14 @@ We want to model this in a hyper-realistic but comfortably-abstracted way. Our g
 
 **Abstraction 1:** We ignore everything below the lithosphere. We can just simulate the effects the asthenosphere has on it abstractly, and we don't even need to think about anything lower than that.
 
+# Pre-Modelling: Surface Representation
+There are a few different ways to represent the surface, which is a key requirement of any model we develop here. I initially considered having multiple possible planet geometries, namely at least Flat, Cyllindrical, and Spherical, and I stand by it. Each one applies certain constraints to any model we use, but I believe this should not be an issue given a well-designed architecture. So we should consider those possibilities.
+
+We can look at the surface as a grid of some sort, or discretize it into points. Height-map-based methods (where we calculate heights directly onto a static location on the surface) would tend to work better with a grid; truer tectonic simulations with movement of surfaces would tend to work better with surface points.
+
+For Spheres, there is an easily-found (or LLM-able) method to distribute points evenly across a sphere: look-up Fibonacci Spheres. There are other solutions, that one is pretty popular and looks pretty good.
+For flat and cyllindrical worlds, we don't need to worry about that. For a flat world it's pretty obvious, and for a cyllindrical world, consider that it's just a flat world that was curved inwards until 2 of its opposing edges connected to each other.
+
 # Modelling 1: Plate and Boundary Geometries
 ## 1.1: Initial Generation
 There are 2 options: 
