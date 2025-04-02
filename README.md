@@ -1,10 +1,15 @@
+# MAJOR TODOS 
+- Review the DeepResearch prompt I gave ChatGPT to find more info on this specific topic. Fill in the details here.
+- Compile all of my notes in the .py files' comments into this document. Store the notes on other peoples' implementations in an annex.
+
 # Great References:
 - Tectonic Generation (but decent, there's a lot of crap ones out there)
   - https://perso.liris.cnrs.fr/eric.galin/Articles/2019-planets.pdf#:~:text=scale%20planetary%20features%20generated%20by,Figure%201
 - Tectonic Simulation (with pre-built data, e.g. for studying the Earth's movements)
   - GPlates
 - General Geology:
-  - https://www.youtube.com/@LehrvideosSystemErde/videos (also with accompanying written materials in the website of the DGGV, but harder to navigate and find the lectures there)
+  - German Geological Society educational videos: https://www.youtube.com/@LehrvideosSystemErde/videos (also with accompanying written materials in the website of the DGGV, but harder to navigate and find the lectures there)
+  - Hawaii University random web book: https://laulima.hawaii.edu/access/content/group/dbd544e4-dcdd-4631-b8ad-3304985e1be2/book/toc/toc.htm
 
 # The Basics
 The surface of the world is made up of contiguous rigid plates that move against each other - the lithosphere -, pushed by convection currents in the underlying fluid asthenosphere, as well as slab-pull (if part of the plate is being pushed down, the rest gets dragged along) and ridge-push (wherever 2 plates move apart, there is material coming to the top and cooling down and becoming part of the slabs, and it pushes the rest of the slab away) forces.
@@ -149,8 +154,6 @@ Rock types:
 ## 4.3 Mineral Resources
 - **Gold and other ores:** Convergent boundaries and orogenic belts are prime zones. Areas that have undergone subduction-related magmatism or continental collision are likely to have rich mineralization.
 - **Diamond:** Diamonds are linked to ancient, stable continental interiors ("cratons") with very thick lithosphere. Any continental crust that has remained intact and un-subducted for a long span can be treated as a craton. We expect diamond resources to be found in such regions.
-
-### MAJOR TODO - Review the DeepResearch prompt I gave ChatGPT to find more info on this specific topic. Fill in the details here.
 
 
 # Modelling 5: Erosion
