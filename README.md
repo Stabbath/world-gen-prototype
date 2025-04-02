@@ -133,7 +133,6 @@ For reference, Earth's crust is about 30% continental.
 ## 4.2 Rock Types
 Oceanic Crust is generally **basaltic**. It's less dense and the crust is thinner (5-10 km).
 Continental Crust is generally **granitic**. It's denser and the crust is thicker (30-70km), and lives longer since it doesn't get subducted.
-- Can also be **felsic**.
 
 More specifically:
 - Divergent zones create mostly *oceanic* **basaltic** material.
