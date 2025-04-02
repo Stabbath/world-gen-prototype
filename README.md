@@ -7,7 +7,8 @@ We want to model this in a hyper-realistic but comfortably-abstracted way. Our g
 
 At some point I considered modeling the crust as discretized spheres and writing a custom soft-body physics engine to simulate it fully. Then I remembered I'm not actually a geophysicist and I'm not getting paid to do this.
 
-# Modeling 1: Plate and Boudary Geometries
+# Modeling 1: Plate and Boundary Geometries
+## Modeling 1.1: Initial Generation
 There are 2 options: 
 1. You define plates and then the boundaries are the edges of those plates; or
 2. You define boundaries, and then the plates are the space between those boundaries.
@@ -26,6 +27,11 @@ But in that same prototype we also experimented with boundary-first generation, 
 	- This has basically no cost, and makes a lot of possible calculations later a lot easier.
 - We should perhaps take care that no junctions above degree 3 exist, as only 4 is possible and those collapse very quickly down into a 3.
 
+## Modeling 1.2: Plate Rift Dynamics
+As we will see later, the moving plates can get subducted, pushed back into the earth and destroyed, which would mean that over time plates would continuously be destroyed with some "stronger plate" or perfectly balanced set of plates eventually taking up the entire world. This is obviously not what happens on geologically-active planets. For example, on Earth, we can see something interesting happening currently: there is a rift forming between the Horn of Africa and the rest of the mainland, which in the future will eventually break it off into its own separate plate and begin pushing the African continent and the Horn of Africa away from each other, as a new divergent boundary and future rift. This is also what happened to push South America away from Africa, which has turned into what now is the mid-atlantic ridge.
+
+So, we need to periodically and dynamically create new rifts to break apart large plates. Each time we do so, we will have to recalculate Euler poles and/or rotational velocity, probably in a way that preserves momentum for the 2 new sub-plates breaking apart from the original. That might be what explains the "instant" and drastic change in direction that one can observe in the volcanic chains of pacific islands, like Hawaii. **TODO Question** - I haven't seen that explained that way anywhere, but it seems like a likely physical grounding for that sort of event.
+
 # Modeling 2: Tectonic Motion
 
 ## 2.1: Isolated Motion
@@ -39,6 +45,10 @@ The simplest and most accurate method I managed to find after a lot of research 
 		-  If they move at the *exact* same speed, we should maybe merge the 2 plates? I'm not sure how that would work; I guess the *exact* same speed is probably something that never actually really happens.
 	- If the 2 plates move towards each other, the boundary is convergent.
 
+**Possible Pitfalls:**
+- Poles being too close to the center of a plate can cause it to move extremely slowly, which may not be desirable.
+- There might be issues if we attribute directions to plates completely randomly, e.g. if they all move in the same direction and/or very slowly. I think a robust system where new rifts appear etc could probably solve this on its own, but it may make it take very long for the generation to yield a visually interesting world.
+
 ### Addendum:
 **TODO:** note that boundaries themselves *also* move. I can't remember what solution I had proposed for this, but I think either we:
 - Need to calculate a velocity for the fault based on its adjoining plates (maybe complicated, maybe inaccurate?); or
@@ -48,22 +58,47 @@ The simplest and most accurate method I managed to find after a lot of research 
 ## 2.2: Convergence and Divergence 
 As the plates move, they will diverge from or converge at their boundaries, as we appropriately categorised.
 - New material must be produced where they diverge, as new crust is produced from the uprising mantle and what have you. 
-- Where they converge, crust must be transformed and destroyed.
+- Where they converge, crust must be transformed and destroyed. Or in some cases also created, through volcanism.
+
+In general, we may want to keep con
 
 ### 2.2.1 Divergence
 Very simple: after every time step, we must fill all space around each divergent boundary that has become empty as space opens up between the plates. These new points get added onto to the plate on the appropriate side.
 
+### 2.2.2 Convergence
+Typically, crust/plates are classed as either continental or oceanic. Their mineral composition is different, with a key difference being that continental is less dense. Density also changes with age: older = denser.
+
+Where 2 plates converge, things happen. Firstly, in all but 1 case, there is subduction, which depends on which plate is less dense:
+- **Oceanic-oceanic:** the older plate gets subducted underneath the younger.
+  - There's a bit of a magmatic mess, leading to volcanic activity which creates new oceanic or intermediate crust. This creates a feature called an "island arc" (e.g. Caribbean chain). Not to be confused with hot spot island chains like Hawaii.
+- **Continental-continental:** neither can be subducted because they are just too light, causing uplift and deformation leading to massive mountain chains (e.g. Himalayas).
+- **Oceanic-continental:** the oceanic plate gets subducted underneath the continental plate. This causes uplift of the continental crust, causing mountain chains as well, but I think typically smaller than continental-continental (e.g. Andes).
+  - Additionally, there's a bit of a magmatic mess going down with the melting of the subducted plate, which leads to volcanism and the creation of new continental crust, in addition to the uplift.
 
 # Modeling 3: Hot Spots
-Hot Spots are .... 
+Hot Spots are places on the earth's crust where magma seeps upwards, disconnected from any boundary line. They are considered to have a constant position, unlike boundaries which often move with the plates. As they periodically emit matter through volcanism, they form mountains. As the plates move through and away, this causes island chains (e.g. Hawaii). If there's enough mass to reach sea level, it's what's called a "seamount". These islands are really a series of volcanoes with varying levels of activity: as a volcano gets pushed away from the hot spot, its activity decreases until it becomes extinct.
+
+They are mostly centered on and around divergent boundaries (although it can still be quite distant), and *never* appear on top of subductive boundaries (the main type of convergence).
+- **TODO Question:** How does that work with the fact that they're supposed to have constant positions? Or do divergent boundaries also have constant positions? And just convergent ones can move. Unless the thing is that if the divergent boundary moves, then the hot spots that start to be too far away die out.
 
 There are estimated to be about 40-50 active hot spots on Earth.
 
-They are considered to have a constant position, unlike divergent boundaries which often move with the plates.
+# Modeling 4: Crust Creation & Mineral Resources
+As already mentioned, crust gets remixed and created at all bondaries except continental-continental convergent, as well as at hot spots.
 
-They are mostly centered on and around divergent boundaries (although it can still be quite distant), and *never* appear on top of subductive boundaries (the main type of convergence).
-- **TODO Question:** How does that work with the fact that they're supposed to have constant positions? Or do divergent boundaries also have constant positions? And just convergent ones can move. Unless the thing is that if the divergent boundary moves, then the hot spots that start to become too far away die out.
+There are a couple of open questions in this area:
+1. Should we worry about keeping crust creating equal to crust destruction (at subduction areas)? Will that be relevant?
+2. How do we represent different types of crust and rock? Is just a single monolithic "crust" enough? Do we just go with continental and oceanic? An arbitrary array? Or do we even go more specific and look at different types of rocks, in greater detail than just "oceanic" and "continental"?
 
+So below follow a number of explorations of these concerns...
+
+## Continental, Oceanic, or Both?
+**TODO Question:** Plates can have both oceanic AND continental crust. Should we model this? And how? As a percentage, as 2 (or more) layers of a single plate, or some other way?
+
+For reference, Earth's crust is about 30% continental.
+
+## Mineral Resources & Rock Types
+- Hotspot Volcanism: generates **Basalt**
 
 
 
@@ -108,15 +143,6 @@ They are mostly centered on and around divergent boundaries (although it can sti
 - in continental-continental convergent zones, neither gets subducted, so the crust thickens and uplifts and forms huge mountain ranges (himalayas)
 
 
-Oceanic Crust is created in divergent zones.
-Oceanic Crust is also created at hot spots.
-Continental Crust is created through arc volcanism at subduction zones.
-Continental Crust is also pushed up at continental-oceanic subduction zones.
-
-
-I have a lot of disparate notes on crust and rock types... need to bring it all together with a bit more detail.
-
-
 IDEA: probably it would be best to create boundaries and plates one by one, carefully. So they always remain consistent.
 	We could set-up the algorithm in such a way that the appearance of new rifts (like the east-african one) is the same mechanism as we use for the initial generation...
 	So for the initial set-up, we would force a rift, find its opposing subduction zones, define plates and plate movement, and repeat, until we reach the desired number of plates (as specified in input params)
@@ -126,3 +152,13 @@ IDEA: probably it would be best to create boundaries and plates one by one, care
 SOME THINGS TO THINK ABOUT:
 - Formally define each of the possible geological features? Might be useful. Can probably checks GPlates for their definitions
 - Should we track rock types more specifically than just continental and oceanic crust? Given the thing about Andesite. Could be interesting as well if it then can help us determine where e.g. gold or diamond deposits might be more likely.
+
+
+# Annex (for now): crust and rock types and geological resources
+
+Oceanic Crust is created in divergent zones.
+Oceanic Crust is also created at hot spots.
+Continental Crust is created through arc volcanism at subduction zones.
+Continental Crust is also pushed up at continental-oceanic subduction zones.
+
+
