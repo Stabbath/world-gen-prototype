@@ -1,3 +1,11 @@
+# Great References:
+- Tectonic Generation (but decent, there's a lot of crap ones out there)
+  - https://perso.liris.cnrs.fr/eric.galin/Articles/2019-planets.pdf#:~:text=scale%20planetary%20features%20generated%20by,Figure%201
+- Tectonic Simulation (with pre-built data, e.g. for studying the Earth's movements)
+  - GPlates
+- General Geology:
+  - https://www.youtube.com/@LehrvideosSystemErde/videos (also with accompanying written materials in the website of the DGGV, but harder to navigate and find the lectures there)
+
 # The Basics
 The surface of the world is made up of contiguous rigid plates that move against each other - the lithosphere -, pushed by convection currents in the underlying fluid asthenosphere, as well as slab-pull (if part of the plate is being pushed down, the rest gets dragged along) and ridge-push (wherever 2 plates move apart, there is material coming to the top and cooling down and becoming part of the slabs, and it pushes the rest of the slab away) forces.
 
