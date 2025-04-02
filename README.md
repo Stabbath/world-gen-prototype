@@ -14,16 +14,14 @@ There are 2 options:
 - **Option 1** is normally done through Voronoi partition or some flood-fill or expansion algorithm (with a discretized grid or set of points or shapes representing small sections of the crust).
 - **Option 2...** isn't done? I don't remember finding anything in my research where they generated boundaries first. Which I think is a big reason why their continents so often look blocky. 
 
-In our first prototype, we attempted something along the lines of 1, with an over-generation of plates which get merged down to the goal number, which was already an improvement.
-
-But in that same prototype we also experimented with boundary-first generation, and it yielded even better results at a slightly lower computational cost.
+In our first prototype, we attempted something along the lines of 1, with an over-generation of plates which get merged down to the goal number, which was already an improvement over the "state-of-the-art" voronoi method which looks like crap. In that same prototype we also experimented with boundary-first generation, and it yielded better results still, at a slightly lower theoretical computational cost.
 
 **Decision 1:** We generate boundaries first, using some random-walk or similar method, and calculate plates from the boundaries.
 
 **Refinements:** 
 - We must define each boundary as being between 2 and only 2 plates. Wherever there is a triple junction, we will see it as 3 boundaries meeting, and not as 1 boundary meeting another which ends at the junction.
 	- This has basically no cost, and makes a lot of possible calculations later a lot easier.
-- We should perhaps take care that no junctions above degree 3 exist, as only 4 is possible and those collapse very quickly down into a 3.
+- We should perhaps take care that no junctions above degree 3 exist, as only 4 is still possible and those collapse very quickly back down into a 3. Although if plates and boundaries move correctly, this will just solve itself.
 
 ## 1.2: Plate & Boundary Dynamics
 ### Rifting
