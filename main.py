@@ -3,10 +3,14 @@ import pygame
 import sys
 import traceback
 from camera import Camera
-from hex_grid import HexGrid
 from hex_view import HexView
+from hex_view_colors import color_plates, color_altitude, color_hydro, color_faults
 from map_generator import generate_map
 from neighbor_functions import get_neighbors_wraparound
+from config import default_config, ui_fields as UI_FIELDS
+#from config_panel import ConfigPanel
+from config_filer import update_config_from_file, config_to_file
+from view_tabs import TabPanel
 
 # ------------------------------
 # Constants and Configurations
@@ -15,8 +19,15 @@ from neighbor_functions import get_neighbors_wraparound
 # Screen settings
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 800
-BACKGROUND_COLOR = (0, 0, 0)  # White background
-FPS = 60 # CAP the frame rate at 60 FPS
+BACKGROUND_COLOR = (0, 0, 0)  # Black background
+FPS = 60  # Cap the frame rate at 60 FPS
+
+# Panel settings
+PANEL_WIDTH = 0  # Width of the left-side panel
+TAB_BUTTON_WIDTH = 100
+TAB_BUTTON_HEIGHT = 30
+TAB_BUTTON_PADDING = 10
+TABS_HEIGHT = TAB_BUTTON_HEIGHT + TAB_BUTTON_PADDING 
 
 # Hexagon settings
 HEX_SIZE = 20  # Adjusted size
@@ -25,51 +36,39 @@ HEX_WIDTH = 2 * HEX_SIZE
 VERTICAL_SPACING = HEX_HEIGHT
 HORIZONTAL_SPACING = HEX_WIDTH * 0.75  # Flat-topped hexagons overlap horizontally by 25%
 
-# Initial Grid settings
-INITIAL_GRID_COLS = 50  # Increased grid size for better visual effect
-INITIAL_GRID_ROWS = 50  # Increased grid size for better visual effect
-
-# Colors (default values)
-DEFAULT_HEX_COLOR = (173, 216, 230)               # Light blue (ocean)
-DEFAULT_OUTLINE_COLOR = (0, 0, 0)                 # Black
-LABEL_COLOR = (255, 255, 255)        # White
-
-SELECTED_HEX_COLOR = (0, 0, 0)             # Black
-SELECTED_LABEL_COLOR = (255, 255, 255)    # White
-SELECTED_OUTLINE_COLOR = (255, 255, 255)  # White
-
-LINE_HEX_COLOR = (0, 0, 0)                 # Black (fault lines)
-LINE_LABEL_COLOR = (255, 255, 255)        # White
-LINE_OUTLINE_COLOR = (255, 255, 255)      # White
-
-color_dict = {
-    'default_hex':  DEFAULT_HEX_COLOR,
-    'default_outline':  DEFAULT_OUTLINE_COLOR,
-    'default_label':  LABEL_COLOR,
-    'line_hex':  LINE_HEX_COLOR,
-    'line_outline':  LINE_OUTLINE_COLOR,
-    'line_label':  LINE_LABEL_COLOR
-}
-
-# Font settings
-FONT_NAME = None  # Default font
-BASE_FONT_SIZE = 14  # Base font size for hex labels
-
-font_dict = {
-    'base_size':  14,
-    'base_name':  FONT_NAME
-}
-
 # Zoom settings
 ZOOM_STEP = 1.1  # Zoom in/out factor per mouse wheel event
-MIN_ZOOM = 0.5    # Minimum zoom level
-MAX_ZOOM = 3.0    # Maximum zoom level
+MIN_ZOOM = 0.1   # Reduced minimum zoom level to allow more zooming out
+MAX_ZOOM = 3.0   # Maximum zoom level
 
-# Number of tiles to select for fault generation
-INITIAL_N_SELECTED_TILES = 12  # Number of starting points along the boundaries
 
-# Generation method
-GEN_METHOD = 0  # Set to 0 for fault-based generation, 1 for plate-based generation
+VIEW_LABELS = ["Plates", "Faults", "Elevation", "Hydro"]
+
+def full_gen(config):
+    # NOTE - this is kind of a bandaid to simplify logic.
+    # The UI was a pain in the ass, so now we read and re-read the config from a json file whenever we want to generate a map
+    update_config_from_file(config)
+    hex_grid = gen_world(config)
+    hex_views = gen_views(config, hex_grid)
+    return hex_grid, hex_views
+
+def gen_views(config, hex_grid):
+    # HexViews for different tabs
+    hex_views = {
+        "Plates": HexView(hex_grid, size=HEX_SIZE, func_color=color_plates, config=config, offset_x=100, offset_y=100),
+        "Faults": HexView(hex_grid, size=HEX_SIZE, func_color=color_faults, config=config, offset_x=100, offset_y=100),
+        "Elevation": HexView(hex_grid, size=HEX_SIZE, func_color=color_altitude, config=config, offset_x=100, offset_y=100),
+        "Hydro": HexView(hex_grid, size=HEX_SIZE, func_color=color_hydro, config=config, offset_x=100, offset_y=100)
+    }
+    return hex_views
+
+def gen_world(config):
+    hex_grid = generate_map(
+        config,
+        func_neighbors=get_neighbors_wraparound
+    )
+    return hex_grid
+
 
 # ------------------------------
 # Pygame Initialization and Main Loop
@@ -96,69 +95,116 @@ def main():
         pan_start_pos = pygame.math.Vector2(0, 0)
         pan_start_offset = pygame.math.Vector2(0, 0)
 
-        # Initial map generation
-        hex_grid = generate_map(
-            GEN_METHOD,
-            cols=INITIAL_GRID_COLS,
-            rows=INITIAL_GRID_ROWS,
-            n_selected=INITIAL_N_SELECTED_TILES,
-            func_neighbors=get_neighbors_wraparound
-        )
+        config = default_config() # TODO - temp, but plates config has nothing that would tamper with faults method, right now anyway
+        
+        # NOTE - this is for our bandaid config input solution
+        # it just makes sure that the file's starting settings are always the same as we've set them in our default_config in code
+        config_to_file(config)
 
-        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
+        # Initial map generation
+        hex_grid, hex_views = full_gen(config)
+        
+        current_tab = VIEW_LABELS[0] # defaul view
+
+        font = pygame.font.SysFont('Arial', 18)
+
+        def config_panel_callback(action):
+            nonlocal hex_grid, hex_views
+            if action == 'regen':
+                hex_grid, hex_views = full_gen(config)
+            elif action == 'config_changed':
+                pass # we don't need to do anything, config is changed in place
+
+#        config_panel = ConfigPanel(PANEL_WIDTH, SCREEN_HEIGHT, config, UI_FIELDS, font, config_panel_callback)
+        tab_panel = TabPanel(VIEW_LABELS, PANEL_WIDTH, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, TAB_BUTTON_PADDING)
+
+        # Main view rectangle adjusted to not overlap with tab buttons
+        main_view_rect = pygame.Rect(PANEL_WIDTH, TABS_HEIGHT, SCREEN_WIDTH - PANEL_WIDTH, SCREEN_HEIGHT - TABS_HEIGHT)
 
         # Main loop flag
         running = True
-
+        
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-
-                # Handle zooming with mouse wheel
+                    break
+        
+                # # Process the event with the config panel first
+                # if config_panel.process_event(event):
+                #     # If the config panel handled the event, skip further processing
+                #     continue
+        
+                # TODO - should clean this up a bit. We should have the view pane in its own class, and then here we would just call "process_event" for each component.
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 4:  # Mouse wheel up to zoom in
-                        mouse_pos = event.pos
-                        camera.adjust_zoom(ZOOM_STEP, mouse_pos)
-                    elif event.button == 5:  # Mouse wheel down to zoom out
-                        mouse_pos = event.pos
-                        camera.adjust_zoom(1 / ZOOM_STEP, mouse_pos)
-                    elif event.button == 1:  # Left mouse button to start panning
-                        is_panning = True
-                        pan_start_pos = pygame.math.Vector2(event.pos)
-                        pan_start_offset = camera.offset.copy()
-
+                    # First, check if the click is on any tab button
+                    tab_clicked = tab_panel.process_event(event)
+        
+                    if tab_clicked is not None:
+                        current_tab = tab_clicked
+                    else:
+                        # Check if mouse is over the main view pane
+                        if main_view_rect.collidepoint(event.pos):
+                            if event.button == 4:  # Mouse wheel up to zoom in
+                                mouse_pos = event.pos
+                                camera.adjust_zoom(ZOOM_STEP, mouse_pos)
+                            elif event.button == 5:  # Mouse wheel down to zoom out
+                                mouse_pos = event.pos
+                                camera.adjust_zoom(1 / ZOOM_STEP, mouse_pos)
+                            elif event.button == 1:  # Left mouse button to start panning
+                                is_panning = True
+                                pan_start_pos = pygame.math.Vector2(event.pos)
+                                pan_start_offset = camera.offset.copy()
+        
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:  # Left mouse button to stop panning
                         is_panning = False
-
+        
                 elif event.type == pygame.MOUSEMOTION:
                     if is_panning:
                         current_pos = pygame.math.Vector2(event.pos)
                         delta = current_pos - pan_start_pos
                         camera.offset = pan_start_offset + delta
-
+        
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
-                        # Regenerate the map
-                        hex_grid = generate_map(
-                            GEN_METHOD,
-                            cols=INITIAL_GRID_COLS,
-                            rows=INITIAL_GRID_ROWS,
-                            n_selected=INITIAL_N_SELECTED_TILES
-                        )
-                        hex_view = HexView(hex_grid, size=HEX_SIZE, offset_x=100, offset_y=100)
-
+                        # Regenerate the map with current settings
+                        hex_grid, hex_views = full_gen(config)
+        
             # Clear the screen
             screen.fill(BACKGROUND_COLOR)
-
-            # Draw the hex grid with labels
-            if hex_view:
-                hex_view.draw(screen, camera, color_dict, font_dict)
-
+        
+            # # Draw left panel
+            # config_panel.draw(screen)
+        
+            # Draw main view pane background
+            pygame.draw.rect(screen, (50, 50, 50), main_view_rect)
+        
+            # Draw the hex grid within the main view pane
+            if current_tab and hex_views.get(current_tab):
+                # Create a surface for the main view
+                main_view_surface = pygame.Surface((main_view_rect.width, main_view_rect.height))
+                main_view_surface.fill(BACKGROUND_COLOR)  # Background color
+        
+                # Adjust camera offset to consider the main view pane position
+                adjusted_camera = Camera(
+                    zoom=camera.zoom,
+                    offset=(camera.offset[0] - PANEL_WIDTH, camera.offset[1] - TABS_HEIGHT),
+                    min_zoom=MIN_ZOOM,
+                    max_zoom=MAX_ZOOM
+                )
+        
+                hex_views[current_tab].draw(main_view_surface, adjusted_camera)
+        
+                # Blit the main view surface onto the screen at the correct position
+                screen.blit(main_view_surface, (PANEL_WIDTH, TABS_HEIGHT))
+        
+            # Draw tabs on top of the main view
+            tab_panel.draw(screen, font, current_tab)
+        
             # Update the display
             pygame.display.flip()
-
+        
             # Cap the frame rate at 60 FPS
             clock.tick(FPS)
 
